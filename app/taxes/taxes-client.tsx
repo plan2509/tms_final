@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { FileText, Copy, Trash2, BarChart3 } from "lucide-react"
+import * as XLSX from 'xlsx'
 
 interface Tax {
   id: string
@@ -126,15 +127,17 @@ export function TaxesClient() {
   const [displayedSections, setDisplayedSections] = useState<Array<{ section: string; content: string }>>([])
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  
+  // AI 이미지 분석 관련 상태
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [extractedText, setExtractedText] = useState<{
-    extracted_text: string
-    text_sections: Array<{
-      section: string
-      content: string
-    }>
-  } | null>(null)
+  const [extractedText, setExtractedText] = useState("")
+  
+  // 새로운 Excel 업로드 상태
+  const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false)
+  const [excelData, setExcelData] = useState<any[]>([])
+  const [isProcessingExcel, setIsProcessingExcel] = useState(false)
+  
   const [stationSearchTerm, setStationSearchTerm] = useState("")
   const [selectedStationId, setSelectedStationId] = useState("")
   const [showStationDropdown, setShowStationDropdown] = useState(false)
@@ -157,57 +160,58 @@ export function TaxesClient() {
     return () => clearTimeout(timer)
   }, [stationSearchTerm, isComposing])
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: userData, error: userError } = await supabase.auth.getUser()
-        if (userError || !userData?.user) {
-          router.push("/auth/login")
-          return
-        }
-
-        setUserId(userData.user.id)
-
-        const { data: profile } = await supabase.from("users").select("*").eq("id", userData.user.id).single()
-        setUserRole(profile?.role || "viewer")
-        setActorName(profile?.name || userData.user.email || "")
-
-        const { data: taxesData, error: taxesError } = await supabase
-          .from("taxes")
-          .select(`
-            *,
-            charging_stations (
-              id,
-              station_name,
-              address,
-              location
-            )
-          `)
-          .order("created_at", { ascending: false })
-
-        const { data: stationsData, error: stationsError } = await supabase
-          .from("charging_stations")
-          .select("id, station_name, address, location")
-          .order("station_name")
-
-        if (taxesError) {
-          console.error("Error fetching taxes:", taxesError)
-        } else {
-          setTaxes(taxesData || [])
-        }
-
-        if (stationsError) {
-          console.error("Error fetching stations:", stationsError)
-        } else {
-          setStations(stationsData || [])
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error)
-      } finally {
-        setIsInitialLoading(false)
+  // fetchData 함수를 전역으로 이동
+  const fetchData = async () => {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData?.user) {
+        router.push("/auth/login")
+        return
       }
-    }
 
+      setUserId(userData.user.id)
+
+      const { data: profile } = await supabase.from("users").select("*").eq("id", userData.user.id).single()
+      setUserRole(profile?.role || "viewer")
+      setActorName(profile?.name || userData.user.email || "")
+
+      const { data: taxesData, error: taxesError } = await supabase
+        .from("taxes")
+        .select(`
+          *,
+          charging_stations (
+            id,
+            station_name,
+            address,
+            location
+          )
+        `)
+        .order("created_at", { ascending: false })
+
+      const { data: stationsData, error: stationsError } = await supabase
+        .from("charging_stations")
+        .select("id, station_name, address, location")
+        .order("station_name")
+
+      if (taxesError) {
+        console.error("Error fetching taxes:", taxesError)
+      } else {
+        setTaxes(taxesData || [])
+      }
+
+      if (stationsError) {
+        console.error("Error fetching stations:", stationsError)
+      } else {
+        setStations(stationsData || [])
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error)
+    } finally {
+      setIsInitialLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchData()
   }, [router, supabase])
 
@@ -300,6 +304,424 @@ export function TaxesClient() {
   const completedTotalPages = useMemo(() => {
     return Math.ceil(completedTaxes.length / sectionItemsPerPage)
   }, [completedTaxes.length, sectionItemsPerPage])
+
+  // 새로운 Excel 업로드 함수
+  const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.name.match(/\.(xlsx|xls)$/)) {
+      toast({
+        title: "파일 형식 오류",
+        description: "Excel 파일(.xlsx, .xls)만 업로드 가능합니다.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsProcessingExcel(true)
+    try {
+      const data = await file.arrayBuffer()
+      const workbook = XLSX.read(data)
+      const sheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[sheetName]
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+
+      if (jsonData.length < 2) {
+        toast({
+          title: "데이터 부족",
+          description: "Excel 파일에 최소 2행(헤더 + 데이터)이 필요합니다.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const headers = jsonData[0] as string[]
+      const rows = jsonData.slice(1) as any[][]
+      
+      // 데이터 변환 및 빈 행 제거
+      const processedData = rows.map((row, index) => {
+        const rowData: any = {}
+        headers.forEach((header, colIndex) => {
+          rowData[header] = row[colIndex]
+        })
+        return { ...rowData, _rowIndex: index + 2 }
+      }).filter(row => {
+        // _rowIndex를 제외한 실제 데이터만 확인
+        const dataValues = Object.entries(row)
+          .filter(([key]) => key !== '_rowIndex')
+          .map(([, value]) => value)
+        
+        // 모든 값이 비어있거나 null/undefined인 행 제거
+        const hasValidData = dataValues.some(value => {
+          if (value === null || value === undefined) return false
+          if (typeof value === 'string') return value.trim() !== ''
+          if (typeof value === 'number') return !isNaN(value)
+          return true
+        })
+        
+        return hasValidData
+      })
+
+      setExcelData(processedData)
+      setIsExcelUploadOpen(true)
+      
+      toast({
+        title: "Excel 파일 로드 완료",
+        description: `${processedData.length}개의 데이터를 발견했습니다.`,
+      })
+    } catch (error) {
+      console.error("Excel 파일 처리 오류:", error)
+      toast({
+        title: "파일 처리 오류",
+        description: "Excel 파일을 읽는 중 오류가 발생했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingExcel(false)
+    }
+  }
+
+  // 새로운 Excel 일괄 등록 함수
+  const handleBulkTaxRegistration = async () => {
+    if (!isAdmin) {
+      toast({
+        title: "권한 없음",
+        description: "관리자만 세금을 등록할 수 있습니다.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsLoading(true)
+    let successCount = 0
+    let errorCount = 0
+    const errors: string[] = []
+
+    try {
+      for (const row of excelData) {
+        try {
+          // 빈 행 체크
+          const hasData = Object.values(row).some(value => 
+            value !== null && value !== undefined && value !== '' && value !== 0
+          )
+          if (!hasData) continue
+
+          // 충전소명 자동 찾기
+          let stationName = ''
+          let station = null
+          
+          for (const [key, value] of Object.entries(row)) {
+            if (key.toLowerCase().includes('충전소') || 
+                key.toLowerCase().includes('station') || 
+                key.toLowerCase().includes('명')) {
+              stationName = String(value).trim()
+              if (stationName) {
+                station = stations.find(s => {
+                  const excelName = stationName.toLowerCase()
+                  const dbName = s.station_name.toLowerCase()
+                  return dbName.includes(excelName) || excelName.includes(dbName) || dbName === excelName
+                })
+                if (station) break
+              }
+            }
+          }
+
+          if (!station) {
+            errors.push(`행 ${row._rowIndex}: 충전소를 찾을 수 없습니다. (${stationName || '충전소명 없음'})`)
+            errorCount++
+            continue
+          }
+
+          // 세금 금액 자동 찾기
+          let taxAmount = 0
+          for (const [key, value] of Object.entries(row)) {
+            if (key.toLowerCase().includes('금액') || 
+                key.toLowerCase().includes('amount') || 
+                key.toLowerCase().includes('세금')) {
+              const amount = Number(value)
+              if (!isNaN(amount) && amount >= 0) {
+                taxAmount = amount
+                break
+              }
+            }
+          }
+
+          // 납부 기한 자동 찾기
+          let dueDate = new Date().toISOString().split('T')[0]
+          for (const [key, value] of Object.entries(row)) {
+            if (key.toLowerCase().includes('기한') || 
+                key.toLowerCase().includes('due') || 
+                key.toLowerCase().includes('날짜')) {
+              const formattedDate = formatDate(value)
+              if (formattedDate !== new Date().toISOString().split('T')[0]) {
+                dueDate = formattedDate
+                break
+              }
+            }
+          }
+
+          // 세금 유형 자동 찾기
+          let taxType = 'acquisition'
+          for (const [key, value] of Object.entries(row)) {
+            if (key.toLowerCase().includes('유형') || 
+                key.toLowerCase().includes('type') || 
+                key.toLowerCase().includes('세금')) {
+              const str = String(value).toLowerCase().trim()
+              if (str.includes('취득') || str.includes('acquisition')) {
+                taxType = 'acquisition'
+              } else if (str.includes('재산') || str.includes('property')) {
+                taxType = 'property'
+              } else if (str.includes('지방') || str.includes('local')) {
+                taxType = 'local'
+              } else {
+                taxType = 'other'
+              }
+              break
+            }
+          }
+
+          // 세금 데이터 구성 (Supabase 구조에 맞춤)
+          const taxData = {
+            station_id: station.id,
+            tax_type: taxType,
+            tax_amount: taxAmount,
+            due_date: dueDate,
+            tax_notice_number: null,
+            tax_year: null,
+            tax_period: null,
+            notes: null,
+            status: 'payment_scheduled' as const,
+            created_by: userId
+          }
+
+          const { error } = await supabase
+            .from('taxes')
+            .insert([taxData])
+
+          if (error) {
+            errors.push(`행 ${row._rowIndex}: ${error.message}`)
+            errorCount++
+          } else {
+            successCount++
+          }
+        } catch (error) {
+          errors.push(`행 ${row._rowIndex}: 처리 중 오류가 발생했습니다.`)
+          errorCount++
+        }
+      }
+
+      // 결과 토스트
+      if (errorCount > 0) {
+        toast({
+          title: "일부 데이터 등록 실패",
+          description: `${successCount}개 성공, ${errorCount}개 실패`,
+          variant: "destructive",
+        })
+        console.log("Excel 업로드 오류 상세:", {
+          errorCount,
+          successCount,
+          totalRows: excelData.length,
+          errors
+        })
+      } else {
+        toast({
+          title: "일괄 등록 완료",
+          description: `${successCount}개의 세금 정보가 등록되었습니다.`,
+        })
+      }
+
+      // 등록 완료 후 팝업 닫기 및 목록 새로고침
+      if (successCount > 0) {
+        // 세금 데이터만 새로고침
+        const { data: taxesData, error: taxesError } = await supabase
+          .from("taxes")
+          .select(`
+            *,
+            charging_stations (
+              id,
+              station_name,
+              address,
+              location
+            )
+          `)
+          .order("created_at", { ascending: false })
+
+        if (!taxesError && taxesData) {
+          setTaxes(taxesData)
+        }
+      }
+      
+      // 등록 처리가 완료되면 항상 팝업 닫기
+      setIsExcelUploadOpen(false)
+      setExcelData([])
+    } catch (error) {
+      console.error("일괄 등록 오류:", error)
+      toast({
+        title: "일괄 등록 실패",
+        description: "일괄 등록 중 오류가 발생했습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // AI 이미지 분석 함수
+  const analyzeImage = async () => {
+    if (!selectedImage) return
+
+    setIsAnalyzing(true)
+    setAnalysisProgress(0)
+
+    try {
+      const formData = new FormData()
+      formData.append('image', selectedImage)
+
+      // 진행률 시뮬레이션
+      const progressInterval = setInterval(() => {
+        setAnalysisProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval)
+            return 90
+          }
+          return prev + 10
+        })
+      }, 200)
+
+      const response = await fetch('/api/analyze-tax-image', {
+        method: 'POST',
+        body: formData,
+      })
+
+      clearInterval(progressInterval)
+      setAnalysisProgress(100)
+
+      const result = await response.json()
+
+      if (result.success && result.data) {
+        setExtractedText(result.data.extracted_text || '')
+        setDisplayedSections(result.data.text_sections || [])
+        setIsShowingResults(true)
+        
+        toast({
+          title: "AI 분석 완료",
+          description: "이미지에서 텍스트를 성공적으로 추출했습니다.",
+        })
+      } else {
+        toast({
+          title: "분석 실패",
+          description: result.error || "이미지 분석 중 오류가 발생했습니다.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('AI 분석 오류:', error)
+      toast({
+        title: "분석 오류",
+        description: "AI 서비스에 연결할 수 없습니다.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAnalyzing(false)
+      setAnalysisProgress(0)
+    }
+  }
+
+  // 이미지 선택 함수
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setSelectedImage(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // 이미지 제거 함수
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    setExtractedText("")
+    setDisplayedSections([])
+    setIsShowingResults(false)
+  }
+
+  // Excel 템플릿 다운로드 함수
+  const downloadExcelTemplate = () => {
+    // 템플릿 데이터 생성
+    const templateData = [
+      // 헤더 행
+      ['충전소명', '세금유형', '세금금액', '납부기한'],
+      // 샘플 데이터 행들
+      ['거제 성포해안도로 위판장우측주차장', '취득세', 500000, '2025-09-08'],
+      ['서울역 충전소', '재산세', 300000, '2024-12-31'],
+      ['강남역 충전소', '지방세', 150000, '2024-11-30'],
+      ['', '', '', ''], // 빈 행 (사용자가 입력할 수 있도록)
+      ['', '', '', ''], // 빈 행
+      ['', '', '', ''], // 빈 행
+    ]
+
+    // 워크북 생성
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(templateData)
+
+    // 컬럼 너비 설정
+    const colWidths = [
+      { wch: 30 }, // 충전소명
+      { wch: 12 }, // 세금유형
+      { wch: 15 }, // 세금금액
+      { wch: 12 }, // 납부기한
+    ]
+    ws['!cols'] = colWidths
+
+    // 헤더 스타일링 (굵게)
+    const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1:D1')
+    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
+      if (!ws[cellAddress]) continue
+      ws[cellAddress].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: "E6E6FA" } }
+      }
+    }
+
+    // 워크시트 추가
+    XLSX.utils.book_append_sheet(wb, ws, '세금등록템플릿')
+
+    // 파일 다운로드
+    const fileName = `세금등록템플릿_${new Date().toISOString().split('T')[0]}.xlsx`
+    XLSX.writeFile(wb, fileName)
+  }
+
+
+
+
+  // 날짜 포맷팅 함수
+  const formatDate = (dateValue: any): string => {
+    if (!dateValue) return new Date().toISOString().split('T')[0]
+    
+    let date: Date
+    
+    if (dateValue instanceof Date) {
+      date = dateValue
+    } else if (typeof dateValue === 'number') {
+      // Excel 날짜 번호를 Date로 변환
+      date = new Date((dateValue - 25569) * 86400 * 1000)
+    } else {
+      date = new Date(dateValue)
+    }
+    
+    if (isNaN(date.getTime())) {
+      return new Date().toISOString().split('T')[0]
+    }
+    
+    return date.toISOString().split('T')[0]
+  }
+
 
   const handleCreateTax = async (formData: FormData) => {
     console.log("[v0] Tax registration attempt - userRole:", userRole)
@@ -439,7 +861,8 @@ export function TaxesClient() {
         variant: "destructive",
       })
     } else {
-      setTaxes(taxes.map((t) => (t.id === editingTax.id ? data : t)))
+      // 강제로 상태 업데이트
+      setTaxes(prevTaxes => prevTaxes.map((t) => (t.id === editingTax.id ? data : t)))
       logAudit({
         menu: "taxes",
         action: "update",
@@ -553,6 +976,7 @@ export function TaxesClient() {
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
     const [searchResults, setSearchResults] = useState<Station[]>([])
     const [isSearching, setIsSearching] = useState(false)
+    const [searchCache, setSearchCache] = useState<Record<string, Station[]>>({})
 
     useEffect(() => {
       const controller = new AbortController()
@@ -566,11 +990,20 @@ export function TaxesClient() {
         }
         try {
           setIsSearching(true)
+          
+          // 캐시 확인
+          if (searchCache[term]) {
+            setSearchResults(searchCache[term])
+            setShowStationDropdown(true)
+            setIsSearching(false)
+            return
+          }
+          
           const wildcard = `%${term}%`
           const { data, error } = await supabase
             .from("charging_stations")
             .select("id, station_name, address, location")
-            .or(`station_name.ilike.${wildcard},address.ilike.${wildcard},location.ilike.${wildcard}`)
+            .ilike("station_name", wildcard)
             .order("station_name")
             .limit(20)
 
@@ -579,8 +1012,15 @@ export function TaxesClient() {
             setSearchResults([])
             setShowStationDropdown(false)
           } else {
-            setSearchResults(data || [])
+            const results = data || []
+            setSearchResults(results)
             setShowStationDropdown(true)
+            
+            // 캐시에 저장
+            setSearchCache(prev => ({
+              ...prev,
+              [term]: results
+            }))
           }
         } finally {
           setIsSearching(false)
@@ -595,7 +1035,7 @@ export function TaxesClient() {
     useEffect(() => {
       const timer = setTimeout(() => {
         if (!isComposing) setDebouncedSearchTerm(stationSearchTerm)
-      }, 300)
+      }, 150)
       return () => clearTimeout(timer)
     }, [stationSearchTerm, isComposing])
 
@@ -1106,6 +1546,12 @@ export function TaxesClient() {
               </p>
             </div>
           </div>
+          {tax.notes && (
+            <div className="mt-3 pt-3 border-t">
+              <p className="text-xs text-muted-foreground mb-1">세금 구분</p>
+              <p className="text-sm font-medium text-blue-600 dark:text-blue-400">{tax.notes}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     )
@@ -1151,21 +1597,50 @@ export function TaxesClient() {
         </div>
 
         {isAdmin && (
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                세금 등록
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="w-[70vw] max-w-none max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>세금 등록</DialogTitle>
-                <DialogDescription>새로운 세금 정보를 입력해주세요.</DialogDescription>
-              </DialogHeader>
-              <TaxForm onSubmit={handleCreateTax} />
-            </DialogContent>
-          </Dialog>
+          <div className="flex gap-2">
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  세금 등록
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="w-[70vw] max-w-none max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>세금 등록</DialogTitle>
+                  <DialogDescription>새로운 세금 정보를 입력해주세요.</DialogDescription>
+                </DialogHeader>
+                <TaxForm onSubmit={handleCreateTax} />
+              </DialogContent>
+            </Dialog>
+            
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => document.getElementById('excel-upload')?.click()}
+              disabled={isProcessingExcel}
+            >
+              <Upload className="h-4 w-4" />
+              {isProcessingExcel ? "처리 중..." : "Excel 업로드"}
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={downloadExcelTemplate}
+            >
+              <FileText className="h-4 w-4" />
+              Excel 템플릿
+            </Button>
+            
+            <input
+              id="excel-upload"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleExcelUpload}
+              style={{ display: 'none' }}
+            />
+          </div>
         )}
       </div>
 
@@ -1427,6 +1902,98 @@ export function TaxesClient() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 새로운 Excel 업로드 다이얼로그 */}
+      <Dialog open={isExcelUploadOpen} onOpenChange={setIsExcelUploadOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Excel 일괄 등록</DialogTitle>
+            <DialogDescription>
+              Excel 파일의 데이터를 자동으로 인식하여 일괄 등록합니다.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* 자동 인식 안내 */}
+            <div className="bg-green-50 dark:bg-green-950/20 p-4 rounded-lg">
+              <h4 className="font-medium text-green-900 dark:text-green-100 mb-2">자동 인식 필드</h4>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                • <strong>충전소명</strong>: "충전소", "station", "명" 포함 컬럼 자동 인식<br/>
+                • <strong>세금 금액</strong>: "금액", "amount", "세금" 포함 컬럼 자동 인식<br/>
+                • <strong>납부 기한</strong>: "기한", "due", "날짜" 포함 컬럼 자동 인식<br/>
+                • <strong>세금 유형</strong>: "유형", "type" 포함 컬럼 자동 인식<br/>
+                <br/>
+                💡 <strong>팁</strong>: "Excel 템플릿" 버튼을 클릭하여 올바른 형식의 템플릿을 다운로드하세요!
+              </p>
+            </div>
+
+            {/* 데이터 미리보기 */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">데이터 미리보기 (최대 10개 행)</h3>
+              <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted">
+                      <tr>
+                        {excelData.length > 0 && Object.keys(excelData[0]).filter(key => key !== '_rowIndex').map((header) => (
+                          <th key={header} className="px-3 py-2 text-left font-medium">
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {excelData.slice(0, 10).map((row, index) => (
+                        <tr key={index} className="border-t">
+                          {Object.keys(row).filter(key => key !== '_rowIndex').map((header) => (
+                            <td key={header} className="px-3 py-2">
+                              {row[header] || '-'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {excelData.length > 10 && (
+                <p className="text-sm text-muted-foreground">
+                  ... 외 {excelData.length - 10}개 행 더 있음
+                </p>
+              )}
+            </div>
+
+            {/* 등록 버튼 */}
+            <div className="pt-4 border-t space-y-3">
+              <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  ✅ 등록 준비 완료: {excelData.length}개 항목을 등록할 수 있습니다.
+                </p>
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsExcelUploadOpen(false)
+                    setExcelData([])
+                  }}
+                >
+                  취소
+                </Button>
+                <Button
+                  onClick={handleBulkTaxRegistration}
+                  disabled={isLoading}
+                  className="gap-2"
+                >
+                  {isLoading ? "등록 중..." : "일괄 등록"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }

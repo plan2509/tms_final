@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, memo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -25,6 +25,7 @@ const textNavigation = [
   { name: "대시보드", href: "/dashboard" },
   { name: "충전소", href: "/stations" },
   { name: "세금", href: "/taxes" },
+  { name: "사업 일정", href: "/station-schedules" },
   { name: "알림", href: "/notifications" },
   { name: "통계", href: "/statistics" },
   { name: "캘린더", href: "/calendar" },
@@ -32,28 +33,38 @@ const textNavigation = [
   { name: "메뉴얼", href: "/manual" },
 ]
 
-export function GlobalLayout({ children }: GlobalLayoutProps) {
+const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
   const [user, setUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [initError, setInitError] = useState<string | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
   const isAuthPage = pathname.startsWith("/auth") || pathname === "/"
 
   useEffect(() => {
+    // 이미 초기화되었으면 다시 실행하지 않음
+    if (isInitialized) return
+
+    let mounted = true
+    let subscription: any = null
+    let timeoutId: NodeJS.Timeout | null = null
+
     const initializeAuth = async () => {
       try {
-        console.log("[v0] GlobalLayout: Initializing Supabase client")
+        // console.log("[v0] GlobalLayout: Initializing Supabase client")
         const supabase = createClient()
 
         if (!supabase) {
           throw new Error("Failed to create Supabase client")
         }
 
+        if (!mounted) return
+
         setInitError(null)
 
-        console.log("[v0] GlobalLayout: Getting user authentication status")
+        // console.log("[v0] GlobalLayout: Getting user authentication status")
 
         const {
           data: { session },
@@ -67,6 +78,8 @@ export function GlobalLayout({ children }: GlobalLayoutProps) {
           }
         }
 
+        if (!mounted) return
+
         if (session?.user) {
           const userData = {
             id: session.user.id,
@@ -74,25 +87,32 @@ export function GlobalLayout({ children }: GlobalLayoutProps) {
             name: session.user.user_metadata?.name || session.user.email?.split("@")[0],
             role: session.user.user_metadata?.role || "user",
           }
-          console.log("[v0] GlobalLayout: Setting user data from session:", userData)
+          // console.log("[v0] GlobalLayout: Setting user data from session:", userData)
           setUser(userData)
+          
           // Fetch DB role to reflect latest permissions
           try {
             const { data: profile } = await supabase.from("users").select("role, name").eq("id", session.user.id).single()
-            if (profile?.role) {
+            if (profile?.role && mounted) {
               setUser((prev) => (prev ? { ...prev, role: profile.role, name: profile.name || prev.name } : prev))
             }
           } catch {}
         } else {
-          console.log("[v0] GlobalLayout: No active session found")
+          // console.log("[v0] GlobalLayout: No active session found")
           setUser(null)
         }
 
+        // Set up auth state change listener (중복 이벤트 방지)
         const {
-          data: { subscription },
+          data: { subscription: authSubscription },
         } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+          if (!mounted) return
+          
+          // INITIAL_SESSION 이벤트는 무시 (이미 처리됨)
+          if (event === 'INITIAL_SESSION') return
+          
           try {
-            console.log("[v0] GlobalLayout: Auth state change event:", event)
+            // console.log("[v0] GlobalLayout: Auth state change event:", event)
             if (session?.user) {
               const userData = {
                 id: session.user.id,
@@ -100,16 +120,16 @@ export function GlobalLayout({ children }: GlobalLayoutProps) {
                 name: session.user.user_metadata?.name || session.user.email?.split("@")[0],
                 role: session.user.user_metadata?.role || "user",
               }
-              console.log("[v0] GlobalLayout: Auth state change - setting user:", userData)
+              // console.log("[v0] GlobalLayout: Auth state change - setting user:", userData)
               setUser(userData)
               try {
                 const { data: profile } = await supabase.from("users").select("role, name").eq("id", session.user.id).single()
-                if (profile?.role) {
+                if (profile?.role && mounted) {
                   setUser((prev) => (prev ? { ...prev, role: profile.role, name: profile.name || prev.name } : prev))
                 }
               } catch {}
             } else {
-              console.log("[v0] GlobalLayout: Auth state change - clearing user")
+              // console.log("[v0] GlobalLayout: Auth state change - clearing user")
               setUser(null)
             }
           } catch (error) {
@@ -117,39 +137,45 @@ export function GlobalLayout({ children }: GlobalLayoutProps) {
           }
         })
 
-        return () => {
-          subscription?.unsubscribe()
-        }
+        subscription = authSubscription
       } catch (error) {
         console.error("[v0] GlobalLayout: Failed to initialize authentication:", error)
-        const errorMessage = error instanceof Error ? error.message : "Failed to initialize authentication"
-        setInitError(errorMessage)
-        setUser(null)
+        if (mounted) {
+          const errorMessage = error instanceof Error ? error.message : "Failed to initialize authentication"
+          setInitError(errorMessage)
+          setUser(null)
+        }
       } finally {
-        console.log("[v0] GlobalLayout: Setting loading to false")
-        setLoading(false)
+        if (mounted) {
+          // console.log("[v0] GlobalLayout: Setting loading to false")
+          setLoading(false)
+          setIsInitialized(true)
+        }
       }
     }
 
-    let cleanup: (() => void) | undefined
-
-    initializeAuth().then((cleanupFn) => {
-      cleanup = cleanupFn
-    })
+    initializeAuth()
 
     return () => {
-      cleanup?.()
+      mounted = false
+      if (subscription) {
+        subscription.unsubscribe()
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
     }
-  }, [])
+  }, [isInitialized])
 
-  console.log(
-    "[v0] GlobalLayout: Current state - loading:",
-    loading,
-    "user:",
-    user ? "present" : "null",
-    "pathname:",
-    pathname,
-  )
+  // 콘솔 로그를 줄여서 성능 개선
+  // console.log(
+  //   "[v0] GlobalLayout: Current state - loading:",
+  //   loading,
+  //   "user:",
+  //   user ? "present" : "null",
+  //   "pathname:",
+  //   pathname,
+  // )
 
   if (initError) {
     return (
@@ -247,6 +273,8 @@ export function GlobalLayout({ children }: GlobalLayoutProps) {
     </div>
   )
 }
+
+export const GlobalLayout = memo(GlobalLayoutComponent)
 
 const handleSignOut = async (router: any) => {
   try {

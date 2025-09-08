@@ -15,15 +15,24 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Load active schedules
-    const { data: schedules, error: schedErr } = await supabase
+    // Load active schedules (tax notifications)
+    const { data: taxSchedules, error: taxSchedErr } = await supabase
       .from("notification_schedules")
-      .select("id, days_before, notification_time, is_active")
+      .select("id, days_before, notification_time, is_active, teams_channel_id")
+      .eq("notification_type", "tax")
       .eq("is_active", true)
-    if (schedErr) throw schedErr
+    if (taxSchedErr) throw taxSchedErr
 
-    if (!schedules || schedules.length === 0) {
-      return NextResponse.json({ success: true, dispatched: 0 })
+    // Load active schedules (station schedule notifications)
+    const { data: stationSchedules, error: stationSchedErr } = await supabase
+      .from("notification_schedules")
+      .select("id, days_before, notification_time, is_active, teams_channel_id")
+      .eq("notification_type", "station_schedule")
+      .eq("is_active", true)
+    if (stationSchedErr) throw stationSchedErr
+
+    if ((!taxSchedules || taxSchedules.length === 0) && (!stationSchedules || stationSchedules.length === 0)) {
+      return NextResponse.json({ success: true, dispatched: 0, dispatchedStation: 0 })
     }
 
     // Determine current time window
@@ -31,17 +40,19 @@ export async function POST(req: NextRequest) {
     const nowStr = now.toISOString()
 
     let dispatched = 0
+    let dispatchedStation = 0
 
-    // Fetch recipients and teams channels
-    const [{ data: recipients }, { data: channels }] = await Promise.all([
-      supabase.from("email_recipients").select("email").eq("is_active", true),
-      supabase.from("teams_channels").select("id, webhook_url").eq("is_active", true),
-    ])
+    // Fetch teams channels
+    const { data: channels } = await supabase
+      .from("teams_channels")
+      .select("id, webhook_url")
+      .eq("is_active", true)
 
-    const emails = (recipients || []).map((r: any) => r.email)
     const webhooksAll = (channels || []).map((c: any) => c.webhook_url)
+    const idToWebhook = new Map((channels || []).map((c: any) => [c.id, c.webhook_url]))
 
-    for (const sched of schedules as any[]) {
+    // Process tax notifications
+    for (const sched of taxSchedules as any[]) {
       // Find taxes due at target day
       const targetDate = new Date(now)
       // Using days_before
@@ -62,41 +73,104 @@ export async function POST(req: NextRequest) {
       // Build message
       const msg = `세금 일정 알림\n대상 건수: ${taxes.length}건\n기한: ${dateStr}`
 
-      // Send emails directly via SendGrid to avoid internal routing issues
-      if (emails.length > 0) {
-        const apiKey = process.env.SENDGRID_API_KEY
-        const fromEmail = process.env.SENDGRID_FROM_EMAIL
-        if (apiKey && fromEmail) {
-          await fetch("https://api.sendgrid.com/v3/mail/send", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              personalizations: [
-                { to: emails.map((email: string) => ({ email })), subject: "세금 일정 알림" },
-              ],
-              from: { email: fromEmail, name: "TMS 세금 관리 시스템" },
-              content: [
-                { type: "text/plain", value: msg },
-                { type: "text/html", value: msg.replace(/\n/g, "<br>") },
-              ],
-            }),
-          })
-        }
-      }
-
-      // Send teams
-      if (webhooksAll.length > 0) {
+      // Send teams to selected channel or all
+      const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
+      const targets = targetWebhook ? [targetWebhook] : webhooksAll
+      if (targets.length > 0) {
         await Promise.all(
-          webhooksAll.map((url: string) =>
+          targets.map((url: string) =>
             fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
           ),
         )
       }
 
       dispatched += taxes.length
+    }
+
+    // Process station schedule notifications
+    for (const sched of stationSchedules as any[]) {
+      // Find stations without schedules (missing dates)
+      const { data: allStations, error: stationsErr } = await supabase
+        .from("charging_stations")
+        .select(`
+          id,
+          station_name,
+          location,
+          address,
+          canopy_installed
+        `)
+      if (stationsErr) throw stationsErr
+
+      const { data: existingSchedules, error: schedulesErr } = await supabase
+        .from("station_schedules")
+        .select("station_id, use_approval_enabled, use_approval_date, safety_inspection_date")
+      if (schedulesErr) throw schedulesErr
+
+      // Find stations missing required dates
+      const missingUseApprovalStations = []
+      const missingSafetyInspectionStations = []
+
+      for (const station of allStations || []) {
+        const existingSchedule = existingSchedules?.find(s => s.station_id === station.id)
+        
+        // Check if station was created more than 'days_before' days ago
+        const stationCreatedDate = new Date(station.created_at)
+        const daysSinceCreation = Math.floor((now.getTime() - stationCreatedDate.getTime()) / (1000 * 60 * 60 * 24))
+        
+        // Only check for missing dates if the station was created more than 'days_before' days ago
+        if (daysSinceCreation >= sched.days_before) {
+          // Check for missing use approval date (only for canopy stations)
+          if (station.canopy_installed) {
+            if (!existingSchedule || !existingSchedule.use_approval_enabled || !existingSchedule.use_approval_date) {
+              missingUseApprovalStations.push(station)
+            }
+          }
+          
+          // Check for missing safety inspection date (all stations)
+          if (!existingSchedule || !existingSchedule.safety_inspection_date) {
+            missingSafetyInspectionStations.push(station)
+          }
+        }
+      }
+
+      // Only send notification if there are missing dates
+      if (missingUseApprovalStations.length === 0 && missingSafetyInspectionStations.length === 0) {
+        continue
+      }
+
+      let msg = `충전소 일정 알림 (생성 후 ${sched.days_before}일 경과)\n\n`
+      msg += "⚠️ 다음 충전소들의 일정 입력이 필요합니다:\n\n"
+
+      if (missingUseApprovalStations.length > 0) {
+        msg += `📋 사용 승인일 미입력 (캐노피 설치 충전소):\n`
+        missingUseApprovalStations.forEach((station: any) => {
+          msg += `• ${station.station_name} - ${station.location}\n`
+        })
+        msg += "\n"
+      }
+
+      if (missingSafetyInspectionStations.length > 0) {
+        msg += `🔍 안전 점검일 미입력:\n`
+        missingSafetyInspectionStations.forEach((station: any) => {
+          msg += `• ${station.station_name} - ${station.location}\n`
+        })
+        msg += "\n"
+      }
+
+      msg += `총 ${missingUseApprovalStations.length + missingSafetyInspectionStations.length}개 충전소의 일정 입력이 필요합니다.`
+
+      // Send teams to selected channel or all
+      const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
+      const targets = targetWebhook ? [targetWebhook] : webhooksAll
+      if (targets.length > 0) {
+        await Promise.all(
+          targets.map((url: string) =>
+            fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
+          ),
+        )
+      }
+
+      dispatchedStation += missingUseApprovalStations.length + missingSafetyInspectionStations.length
     }
 
     // Manual notifications: send at configured date/time when due
@@ -134,32 +208,11 @@ export async function POST(req: NextRequest) {
       ;(channels || []).forEach((c: any) => idToWebhook.set(c.id, c.webhook_url))
 
       for (const n of pendingManuals as any[]) {
-        if ((n.notification_time as string) > nowHm) continue
+        // 매일 오전 10시에만 발송
+        if (nowHm !== "10:00") continue
 
         const msg = n.message as string
 
-        // Send emails
-        if (emails.length > 0) {
-          const apiKey = process.env.SENDGRID_API_KEY
-          const fromEmail = process.env.SENDGRID_FROM_EMAIL
-          if (apiKey && fromEmail) {
-            await fetch("https://api.sendgrid.com/v3/mail/send", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                personalizations: [{ to: emails.map((email: string) => ({ email })), subject: "수동 알림" }],
-                from: { email: fromEmail, name: "TMS 세금 관리 시스템" },
-                content: [
-                  { type: "text/plain", value: msg },
-                  { type: "text/html", value: msg.replace(/\n/g, "<br>") },
-                ],
-              }),
-            })
-          }
-        }
 
         // Send teams to selected channel or all
         const targetWebhook = n.teams_channel_id ? idToWebhook.get(n.teams_channel_id) : null
@@ -182,7 +235,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, dispatched, dispatchedManual, now: nowStr })
+    return NextResponse.json({ success: true, dispatched, dispatchedStation, dispatchedManual, now: nowStr })
   } catch (e) {
     return NextResponse.json({ success: false, error: (e as Error).message || "Unknown" }, { status: 500 })
   }

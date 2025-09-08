@@ -61,6 +61,8 @@ interface Schedule {
   days_before: number
   notification_time: string
   is_active: boolean
+  notification_type?: string
+  teams_channel_id?: string | null
 }
 
 interface Tax {
@@ -75,20 +77,6 @@ interface Tax {
   }
 }
 
-interface EmailRecipient {
-  id: string
-  email: string
-  name: string | null
-  is_active: boolean
-}
-
-type NotificationsClientProps = {}
-
-const typeLabels = {
-  auto: "자동",
-  manual: "수동",
-}
-
 const taxTypeLabels = {
   acquisition: "취득세",
   property: "재산세",
@@ -98,7 +86,6 @@ const taxTypeLabels = {
 export function NotificationsClient() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [teamsChannels, setTeamsChannels] = useState<TeamsChannel[]>([])
-  const [emailRecipients, setEmailRecipients] = useState<EmailRecipient[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [taxes, setTaxes] = useState<Tax[]>([])
   const [userRole, setUserRole] = useState<string>("viewer")
@@ -111,9 +98,6 @@ export function NotificationsClient() {
   const [sortBy, setSortBy] = useState<string>("date-desc")
   const [isCreateNotificationOpen, setIsCreateNotificationOpen] = useState(false)
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false)
-  const [isCreateEmailOpen, setIsCreateEmailOpen] = useState(false)
-  const [isCreateEmailRecipientOpen, setIsCreateEmailRecipientOpen] = useState(false)
-  const [newEmailRecipient, setNewEmailRecipient] = useState({ name: "", email: "" })
   const [editingNotification, setEditingNotification] = useState<Notification | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const router = useRouter()
@@ -202,15 +186,6 @@ export function NotificationsClient() {
           setTaxes(taxesData)
         }
 
-        const { data: emailData } = await supabase
-          .from("email_recipients")
-          .select("*")
-          .eq("is_active", true)
-          .order("email")
-
-        if (emailData) {
-          setEmailRecipients(emailData)
-        }
       } catch (error) {
         console.error("Error fetching data:", error)
       } finally {
@@ -384,9 +359,19 @@ export function NotificationsClient() {
             </div>
           )}
 
-          {/* Delete action for admins */}
+          {/* Actions for admins */}
           {isAdmin && (
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex justify-end gap-2">
+              {!notification.is_sent && (
+                <Button
+                  size="sm"
+                  onClick={() => handleSendNotification(notification.id)}
+                  disabled={isActionLoading}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  발송
+                </Button>
+              )}
               <Button
                 variant="destructive"
                 size="sm"
@@ -412,7 +397,7 @@ export function NotificationsClient() {
       tax_id: rawTaxId && rawTaxId !== "none" ? rawTaxId : null,
       notification_type: "manual" as const,
       notification_date: formData.get("notification_date") as string,
-      notification_time: formData.get("notification_time") as string,
+      notification_time: "10:00", // 매일 오전 10시로 고정
       message: formData.get("message") as string,
       teams_channel_id: rawChannelId && rawChannelId !== "none" ? rawChannelId : null,
       created_by: userId,
@@ -447,7 +432,8 @@ export function NotificationsClient() {
         variant: "destructive",
       })
     } else {
-      setNotifications([data, ...notifications])
+      // 강제로 상태 업데이트
+      setNotifications(prevNotifications => [data, ...prevNotifications])
       // audit log: create notification
       logAudit({
         menu: "notifications",
@@ -537,65 +523,6 @@ export function NotificationsClient() {
     }
   }
 
-  const handleCreateEmailRecipient = async () => {
-    if (!isAdmin) return
-
-    setIsActionLoading(true)
-    try {
-      const { error } = await supabase.from("email_recipients").insert([
-        {
-          name: newEmailRecipient.name || null,
-          email: newEmailRecipient.email,
-          is_active: true,
-        },
-      ])
-
-      if (error) throw error
-
-      // Refresh email recipients
-      await fetchEmailRecipients()
-
-      setIsCreateEmailRecipientOpen(false)
-      setNewEmailRecipient({ name: "", email: "" })
-
-      toast({
-        title: "성공",
-        description: "이메일 수신자가 생성되었습니다.",
-      })
-    } catch (error) {
-      console.error("Error creating email recipient:", error)
-      toast({
-        title: "오류",
-        description: "이메일 수신자 생성에 실패했습니다.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
-
-  const handleDeleteEmailRecipient = async (recipientId: string) => {
-    if (!isAdmin) return
-
-    const confirmed = window.confirm("해당 이메일 수신자를 삭제하시겠습니까?")
-    if (!confirmed) return
-
-    setIsActionLoading(true)
-    try {
-      const { error } = await supabase.from("email_recipients").update({ is_active: false }).eq("id", recipientId)
-
-      if (error) throw error
-
-      await fetchEmailRecipients()
-
-      toast({ title: "삭제 완료", description: "이메일 수신자가 삭제되었습니다." })
-    } catch (error) {
-      console.error("Error deleting email recipient:", error)
-      toast({ title: "오류", description: "이메일 수신자 삭제에 실패했습니다.", variant: "destructive" })
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
 
   const handleSendNotification = async (notificationId: string) => {
     if (!isAdmin) return
@@ -606,62 +533,32 @@ export function NotificationsClient() {
     if (!notification) return
 
     try {
-      // Send email notifications
-      if (emailRecipients.length > 0) {
-        const emailAddresses = emailRecipients.map((r) => r.email)
-        const emailResponse = await fetch("/api/send-email", {
+
+      // Send Teams notification using the same API as test notifications
+      if (teamsChannels.length > 0) {
+        const channelIds = notification.teams_channel_id 
+          ? [notification.teams_channel_id] 
+          : teamsChannels.map((c) => c.id)
+        
+        const teamsResponse = await fetch("/api/send-teams", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            to: emailAddresses,
-            subject: "TMS 세금 알림",
-            html: `
-              <h2>TMS 세금 알림</h2>
-              <p>${notification.message}</p>
-              ${
-                notification.taxes
-                  ? `
-                <hr>
-                <h3>관련 세금 정보</h3>
-                <p><strong>충전소:</strong> ${notification.taxes.charging_stations.station_name}</p>
-                <p><strong>세금 유형:</strong> ${taxTypeLabels[notification.taxes.tax_type as keyof typeof taxTypeLabels]}</p>
-                <p><strong>세금 금액:</strong> ${notification.taxes.tax_amount.toLocaleString()}원</p>
-                <p><strong>납부 기한:</strong> ${new Date(notification.taxes.due_date).toLocaleDateString("ko-KR")}</p>
-              `
-                  : ""
-              }
-              <hr>
-              <p><small>이 메시지는 TMS 시스템에서 자동으로 발송되었습니다.</small></p>
-            `,
+            channelIds: channelIds,
             text: notification.message,
           }),
         })
 
-        if (!emailResponse.ok) {
-          console.error("Email send failed:", await emailResponse.text())
+        if (!teamsResponse.ok) {
+          const errorData = await teamsResponse.json()
+          throw new Error(`Teams 알림 발송 실패: ${errorData.error || "Unknown error"}`)
         }
-      }
 
-      // Send Teams notification (existing code)
-      if (notification.teams_channel_id) {
-        const channel = teamsChannels.find((c) => c.id === notification.teams_channel_id)
-        if (channel) {
-          const response = await fetch(channel.webhook_url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              text: notification.message,
-              title: "TMS 세금 알림",
-            }),
-          })
-
-          if (!response.ok) {
-            throw new Error("Teams 알림 발송 실패")
-          }
+        const teamsResult = await teamsResponse.json()
+        if (!teamsResult.success) {
+          throw new Error(`Teams 알림 발송 실패: ${teamsResult.error}`)
         }
       }
 
@@ -701,7 +598,8 @@ export function NotificationsClient() {
         },
       ])
 
-      setNotifications(notifications.map((n) => (n.id === notificationId ? data : n)))
+      // 강제로 상태 업데이트
+      setNotifications(prevNotifications => prevNotifications.map((n) => (n.id === notificationId ? data : n)))
 
       toast({
         title: "성공",
@@ -741,7 +639,8 @@ export function NotificationsClient() {
         variant: "destructive",
       })
     } else {
-      setNotifications(notifications.filter((n) => n.id !== notificationId))
+      // 강제로 상태 업데이트
+      setNotifications(prevNotifications => prevNotifications.filter((n) => n.id !== notificationId))
       // audit log: delete notification
       logAudit({
         menu: "notifications",
@@ -761,62 +660,6 @@ export function NotificationsClient() {
     setIsActionLoading(false)
   }
 
-  const handleSendTestEmail = async () => {
-    if (!isAdmin) return
-
-    if (emailRecipients.length === 0) {
-      toast({
-        title: "오류",
-        description: "등록된 이메일 수신자가 없습니다.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsActionLoading(true)
-
-    try {
-      const emailAddresses = emailRecipients.map((r) => r.email)
-      const response = await fetch("/api/send-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          to: emailAddresses,
-          subject: "TMS 테스트 이메일",
-          html: `
-            <h2>TMS 테스트 이메일</h2>
-            <p>이것은 TMS 시스템에서 발송하는 테스트 이메일입니다.</p>
-            <p>이메일 알림 시스템이 정상적으로 작동하고 있습니다.</p>
-            <hr>
-            <p><strong>발송 시간:</strong> ${new Date().toLocaleString("ko-KR")}</p>
-            <p><strong>수신자:</strong> ${emailAddresses.join(", ")}</p>
-            <hr>
-            <p><small>이 메시지는 TMS 시스템에서 자동으로 발송되었습니다.</small></p>
-          `,
-          text: "TMS 테스트 이메일 - 이메일 알림 시스템이 정상적으로 작동하고 있습니다.",
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("테스트 이메일 발송 실패")
-      }
-
-      toast({
-        title: "성공",
-        description: `테스트 이메일이 ${emailAddresses.length}명에게 성공적으로 발송되었습니다.`,
-      })
-    } catch (error) {
-      toast({
-        title: "오류",
-        description: "테스트 이메일 발송 중 오류가 발생했습니다.",
-        variant: "destructive",
-      })
-    }
-
-    setIsActionLoading(false)
-  }
 
   const generateTaxReminders = async () => {
     if (!isAdmin) {
@@ -982,15 +825,6 @@ export function NotificationsClient() {
         setTaxes(taxesData)
       }
 
-      const { data: emailData } = await supabase
-        .from("email_recipients")
-        .select("*")
-        .eq("is_active", true)
-        .order("email")
-
-      if (emailData) {
-        setEmailRecipients(emailData)
-      }
     } catch (error) {
       console.error("Error fetching data:", error)
     } finally {
@@ -998,13 +832,6 @@ export function NotificationsClient() {
     }
   }
 
-  const fetchEmailRecipients = async () => {
-    const { data: emailData } = await supabase.from("email_recipients").select("*").eq("is_active", true).order("email")
-
-    if (emailData) {
-      setEmailRecipients(emailData)
-    }
-  }
 
   const NotificationForm = ({ onSubmit }: { onSubmit: (formData: FormData) => void }) => (
     <form action={onSubmit} className="space-y-4">
@@ -1026,16 +853,10 @@ export function NotificationsClient() {
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="notification_date">알림 날짜 *</Label>
-          <Input id="notification_date" name="notification_date" type="date" required />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="notification_time">알림 시간 *</Label>
-          <Input id="notification_time" name="notification_time" type="time" defaultValue="09:00" required />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="notification_date">알림 날짜 *</Label>
+        <Input id="notification_date" name="notification_date" type="date" required />
+        <p className="text-xs text-muted-foreground">매일 오전 10시에 자동으로 발송됩니다.</p>
       </div>
 
       <div className="space-y-2">
@@ -1103,30 +924,6 @@ export function NotificationsClient() {
 
   // Teams 채널 등록 다이얼로그
   
-  const EmailRecipientForm = () => (
-    <div className="space-y-4">
-      <div>
-        <Label htmlFor="recipient-name">이름</Label>
-        <Input
-          id="recipient-name"
-          value={newEmailRecipient.name}
-          onChange={(e) => setNewEmailRecipient((prev) => ({ ...prev, name: e.target.value }))}
-          placeholder="수신자 이름을 입력하세요"
-        />
-      </div>
-      <div>
-        <Label htmlFor="recipient-email">이메일</Label>
-        <Input
-          id="recipient-email"
-          type="email"
-          value={newEmailRecipient.email}
-          onChange={(e) => setNewEmailRecipient((prev) => ({ ...prev, email: e.target.value }))}
-          placeholder="이메일 주소를 입력하세요"
-          required
-        />
-      </div>
-    </div>
-  )
 
   if (isLoading) {
     return (
@@ -1187,7 +984,6 @@ export function NotificationsClient() {
         <TabsList>
           <TabsTrigger value="notifications">알림 목록</TabsTrigger>
           <TabsTrigger value="channels">Teams 채널</TabsTrigger>
-          <TabsTrigger value="emails">이메일 수신자</TabsTrigger>
           <TabsTrigger value="schedules">알림 스케줄</TabsTrigger>
         </TabsList>
 
@@ -1340,104 +1136,104 @@ export function NotificationsClient() {
           </DialogContent>
         </Dialog>
 
-        <TabsContent value="emails" className="space-y-4">
-          {isAdmin && (
-            <div className="flex justify-between items-center">
-              <Button onClick={() => setIsCreateEmailRecipientOpen(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                이메일 수신자 생성
-              </Button>
-              {emailRecipients.length > 0 && (
-                <Button
-                  onClick={handleSendTestEmail}
-                  disabled={isActionLoading}
-                  variant="outline"
-                  className="gap-2 bg-transparent"
-                >
-                  {isActionLoading ? "발송 중..." : "테스트 이메일 발송"}
-                </Button>
-              )}
-            </div>
-          )}
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {emailRecipients.map((recipient) => (
-              <Card key={recipient.id}>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center justify-between gap-2">
-                    <span>{recipient.name || recipient.email}</span>
-                    {isAdmin && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeleteEmailRecipient(recipient.id)}
-                        disabled={isActionLoading}
-                      >
-                        삭제
-                      </Button>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">이메일: </span>
-                      <span className="font-medium">{recipient.email}</span>
-                    </div>
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">상태: </span>
-                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
-                        활성화
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {emailRecipients.length === 0 && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <h3 className="text-lg font-semibold mb-2">등록된 이메일 수신자가 없습니다</h3>
-                <p className="text-muted-foreground text-center">
-                  {isAdmin ? "이메일 수신자를 등록해보세요" : "관리자가 이메일 수신자를 설정할 때까지 기다려주세요"}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
         <TabsContent value="schedules" className="space-y-4">
           {isAdmin && (
             <div className="flex items-center justify-between">
-              <Button
-                className="gap-2"
-                onClick={async () => {
-                  const name = prompt("스케줄 이름", "세금 마감 리마인더")
-                  if (!name) return
-                  const daysStr = prompt("며칠 전 알림(정수)", "3") || "3"
-                  const days = Number(daysStr)
-                  const time = prompt("알림 시간(HH:MM)", "09:00") || "09:00"
-                  setIsActionLoading(true)
-                  try {
-                    const { data, error } = await supabase
-                      .from("notification_schedules")
-                      .insert([{ schedule_name: name, days_before: days, notification_time: time, is_active: true }])
-                      .select()
-                    if (error) throw error
-                    if (data) setSchedules([...(schedules as any), ...(data as any)])
-                    toast({ title: "등록 완료", description: "스케줄이 등록되었습니다." })
-                  } catch (e) {
-                    toast({ title: "오류", description: "스케줄 등록 실패", variant: "destructive" })
-                  } finally {
-                    setIsActionLoading(false)
-                  }
-                }}
-                disabled={isActionLoading}
-              >
-                {isActionLoading ? "등록 중..." : "스케줄 등록"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  className="gap-2"
+                  onClick={async () => {
+                    const name = prompt("스케줄 이름", "세금 마감 리마인더")
+                    if (!name) return
+                    const daysStr = prompt("세금 납부일 기준 며칠 전 알림(정수)", "3") || "3"
+                    const days = Number(daysStr)
+                    const time = "10:00" // 매일 오전 10시로 고정
+                    
+                    // 팀즈 채널 선택
+                    let teamsChannelId = null
+                    if (teamsChannels.length > 0) {
+                      const channelNames = teamsChannels.map((c, i) => `${i + 1}. ${c.channel_name}`).join('\n')
+                      const channelIndex = prompt(`팀즈 채널을 선택하세요 (선택사항):\n${channelNames}\n\n번호를 입력하거나 엔터를 눌러 전체 채널에 발송:`, "")
+                      if (channelIndex && !isNaN(Number(channelIndex)) && Number(channelIndex) > 0 && Number(channelIndex) <= teamsChannels.length) {
+                        teamsChannelId = teamsChannels[Number(channelIndex) - 1].id
+                      }
+                    }
+                    
+                    setIsActionLoading(true)
+                    try {
+                      const { data, error } = await supabase
+                        .from("notification_schedules")
+                        .insert([{ 
+                          schedule_name: name, 
+                          days_before: days, 
+                          notification_time: time, 
+                          notification_type: "tax",
+                          teams_channel_id: teamsChannelId,
+                          is_active: true 
+                        }])
+                        .select()
+                      if (error) throw error
+                      if (data) setSchedules([...(schedules as any), ...(data as any)])
+                      toast({ title: "등록 완료", description: "세금 알림 스케줄이 등록되었습니다." })
+                    } catch (e) {
+                      toast({ title: "오류", description: "스케줄 등록 실패", variant: "destructive" })
+                    } finally {
+                      setIsActionLoading(false)
+                    }
+                  }}
+                  disabled={isActionLoading}
+                >
+                  {isActionLoading ? "등록 중..." : "세금 알림 스케줄"}
+                </Button>
+                
+                <Button
+                  className="gap-2"
+                  variant="outline"
+                  onClick={async () => {
+                    const name = prompt("스케줄 이름", "충전소 일정 리마인더")
+                    if (!name) return
+                    const daysStr = prompt("충전소 생성 후 며칠이 지났을 때 알림(정수)\n\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시", "7") || "7"
+                    const days = Number(daysStr)
+                    const time = "10:00" // 매일 오전 10시로 고정
+                    
+                    // 팀즈 채널 선택
+                    let teamsChannelId = null
+                    if (teamsChannels.length > 0) {
+                      const channelNames = teamsChannels.map((c, i) => `${i + 1}. ${c.channel_name}`).join('\n')
+                      const channelIndex = prompt(`팀즈 채널을 선택하세요 (선택사항):\n${channelNames}\n\n번호를 입력하거나 엔터를 눌러 전체 채널에 발송:`, "")
+                      if (channelIndex && !isNaN(Number(channelIndex)) && Number(channelIndex) > 0 && Number(channelIndex) <= teamsChannels.length) {
+                        teamsChannelId = teamsChannels[Number(channelIndex) - 1].id
+                      }
+                    }
+                    
+                    setIsActionLoading(true)
+                    try {
+                      const { data, error } = await supabase
+                        .from("notification_schedules")
+                        .insert([{ 
+                          schedule_name: name, 
+                          days_before: days, 
+                          notification_time: time, 
+                          notification_type: "station_schedule",
+                          teams_channel_id: teamsChannelId,
+                          is_active: true 
+                        }])
+                        .select()
+                      if (error) throw error
+                      if (data) setSchedules([...(schedules as any), ...(data as any)])
+                      toast({ title: "등록 완료", description: "충전소 일정 알림 스케줄이 등록되었습니다." })
+                    } catch (e) {
+                      toast({ title: "오류", description: "스케줄 등록 실패", variant: "destructive" })
+                    } finally {
+                      setIsActionLoading(false)
+                    }
+                  }}
+                  disabled={isActionLoading}
+                >
+                  {isActionLoading ? "등록 중..." : "충전소 일정 스케줄"}
+                </Button>
+              </div>
 
               <Button
                 variant="outline"
@@ -1475,13 +1271,29 @@ export function NotificationsClient() {
                           variant="outline"
                           onClick={async () => {
                             const name = prompt("스케줄 이름", schedule.schedule_name) || schedule.schedule_name
-                            const days = Number(prompt("며칠 전 알림(정수)", String(schedule.days_before)) || schedule.days_before)
-                            const time = prompt("알림 시간(HH:MM)", schedule.notification_time) || schedule.notification_time
+                            const promptText = schedule.notification_type === 'tax' 
+                              ? "세금 납부일 기준 며칠 전 알림(정수)"
+                              : "충전소 생성 후 며칠이 지났을 때 알림(정수)\n\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시"
+                            const days = Number(prompt(promptText, String(schedule.days_before)) || schedule.days_before)
+                            const time = "10:00" // 매일 오전 10시로 고정
+                            
+                            // 팀즈 채널 선택
+                            let teamsChannelId = schedule.teams_channel_id
+                            if (teamsChannels.length > 0) {
+                              const channelNames = teamsChannels.map((c, i) => `${i + 1}. ${c.channel_name}`).join('\n')
+                              const channelIndex = prompt(`팀즈 채널을 선택하세요 (선택사항):\n${channelNames}\n\n번호를 입력하거나 엔터를 눌러 전체 채널에 발송:`, "")
+                              if (channelIndex && !isNaN(Number(channelIndex)) && Number(channelIndex) > 0 && Number(channelIndex) <= teamsChannels.length) {
+                                teamsChannelId = teamsChannels[Number(channelIndex) - 1].id
+                              } else if (channelIndex === "") {
+                                teamsChannelId = null
+                              }
+                            }
+                            
                             setIsActionLoading(true)
                             try {
                               const { error } = await supabase
                                 .from("notification_schedules")
-                                .update({ schedule_name: name, days_before: days, notification_time: time })
+                                .update({ schedule_name: name, days_before: days, notification_time: time, teams_channel_id: teamsChannelId })
                                 .eq("id", schedule.id)
                               if (error) throw error
                               // refresh
@@ -1531,6 +1343,12 @@ export function NotificationsClient() {
                 <CardContent>
                   <div className="space-y-2">
                     <div className="text-sm">
+                      <span className="text-muted-foreground">알림 유형: </span>
+                      <Badge className={schedule.notification_type === 'tax' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300'}>
+                        {schedule.notification_type === 'tax' ? '세금 알림' : '충전소 일정 알림'}
+                      </Badge>
+                    </div>
+                    <div className="text-sm">
                       <span className="text-muted-foreground">알림 시점: </span>
                       <span className="font-medium">{schedule.days_before}일 전</span>
                     </div>
@@ -1538,6 +1356,14 @@ export function NotificationsClient() {
                       <span className="text-muted-foreground">알림 시간: </span>
                       <span className="font-medium">{schedule.notification_time}</span>
                     </div>
+                    {schedule.teams_channel_id && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">팀즈 채널: </span>
+                        <span className="font-medium">
+                          {teamsChannels.find(c => c.id === schedule.teams_channel_id)?.channel_name || '알 수 없음'}
+                        </span>
+                      </div>
+                    )}
                     <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">활성화</Badge>
                   </div>
                 </CardContent>
@@ -1563,47 +1389,6 @@ export function NotificationsClient() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCreateEmailRecipientOpen} onOpenChange={setIsCreateEmailRecipientOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>새 이메일 수신자 추가</DialogTitle>
-            <DialogDescription>새로운 이메일 수신자를 추가합니다.</DialogDescription>
-          </DialogHeader>
-          <form action={handleCreateEmailRecipient} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="recipient_name">이름 *</Label>
-              <Input
-                id="recipient_name"
-                name="name"
-                value={newEmailRecipient.name}
-                onChange={(e) => setNewEmailRecipient({ ...newEmailRecipient, name: e.target.value })}
-                placeholder="수신자 이름을 입력하세요"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="recipient_email">이메일 *</Label>
-              <Input
-                id="recipient_email"
-                name="email"
-                type="email"
-                value={newEmailRecipient.email}
-                onChange={(e) => setNewEmailRecipient({ ...newEmailRecipient, email: e.target.value })}
-                placeholder="이메일 주소를 입력하세요"
-                required
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsCreateEmailRecipientOpen(false)}>
-                취소
-              </Button>
-              <Button type="submit" disabled={isActionLoading}>
-                {isActionLoading ? "추가 중..." : "추가"}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

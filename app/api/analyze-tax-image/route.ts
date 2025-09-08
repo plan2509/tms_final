@@ -1,5 +1,4 @@
-import { generateText } from "ai"
-import { xai } from "@ai-sdk/xai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import type { NextRequest } from "next/server"
 import { Buffer } from "buffer"
 
@@ -32,20 +31,26 @@ export async function POST(request: NextRequest) {
       return Response.json({ success: false, error: "잘못된 요청 형식입니다." }, { status: 400 })
     }
 
-    console.log("[v0] Calling Grok AI for image analysis")
-    console.log("[v0] XAI key present:", Boolean(process.env.XAI_API_KEY))
+    console.log("[Gemini] Calling Gemini AI for image analysis")
+    console.log("[Gemini] Google AI key present:", Boolean(process.env.GOOGLE_AI_API_KEY))
+
+    if (!process.env.GOOGLE_AI_API_KEY) {
+      console.error("[Gemini] GOOGLE_AI_API_KEY not found")
+      return Response.json({
+        success: true,
+        data: {
+          extracted_text: "AI 서비스가 설정되지 않았습니다.",
+          text_sections: [],
+        },
+      })
+    }
 
     let result
     try {
-      result = await generateText({
-        model: xai("grok-2-vision-1212"),
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `이미지에서 인식되는 모든 텍스트를 정확히 읽어서 JSON 형태로 정리해주세요.
+      const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY)
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+
+      const prompt = `이미지에서 인식되는 모든 텍스트를 정확히 읽어서 JSON 형태로 정리해주세요.
 
 다음과 같이 정리해주세요:
 - 이미지에서 읽을 수 있는 모든 한글, 영어, 숫자를 포함
@@ -64,22 +69,26 @@ export async function POST(request: NextRequest) {
   ]
 }
 
-JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
-              },
-              {
-                type: "image",
-                image: image,
-              },
-            ],
-          },
-        ],
-        system:
-          "You are an expert OCR text extraction system. You specialize in reading all text from images including Korean, English, and numbers. Extract every visible text accurately and organize it systematically. Return ONLY valid JSON format without any additional text, explanations, or markdown formatting.",
-      })
-      console.log("[v0] AI call completed successfully")
+JSON 외에는 어떤 텍스트도 포함하지 마세요.`
+
+      // Convert base64 to buffer for Gemini
+      const base64Data = image.split(',')[1]
+      const imageBuffer = Buffer.from(base64Data, 'base64')
+
+      result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: imageType
+          }
+        }
+      ])
+
+      console.log("[Gemini] AI call completed successfully")
     } catch (aiError: any) {
       // Log minimal diagnostics without leaking secrets
-      console.error("[v0] AI generation failed:")
+      console.error("[Gemini] AI generation failed:")
       try {
         console.error("  message:", aiError?.message)
         console.error("  status:", aiError?.status || aiError?.response?.status)
@@ -94,8 +103,8 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
       })
     }
 
-    if (!result || !result.text) {
-      console.log("[v0] AI returned empty response")
+    if (!result || !result.response) {
+      console.log("[Gemini] AI returned empty response")
       return Response.json({
         success: true,
         data: {
@@ -105,13 +114,15 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
       })
     }
 
-    console.log("[v0] AI response received:", result.text)
+    const response = await result.response
+    const text = response.text()
+    console.log("[Gemini] AI response received:", text)
 
     let extractedData
     try {
       // Remove any potential markdown formatting or extra text
-      let cleanText = result.text.trim()
-      console.log("[v0] Cleaning AI response:", cleanText)
+      let cleanText = text.trim()
+      console.log("[Gemini] Cleaning AI response:", cleanText)
 
       // Remove markdown code blocks if present
       cleanText = cleanText.replace(/```json\s*/g, "").replace(/```\s*/g, "")
@@ -122,14 +133,14 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
 
       if (jsonStart !== -1 && jsonEnd !== -1) {
         cleanText = cleanText.substring(jsonStart, jsonEnd + 1)
-        console.log("[v0] Extracted JSON string:", cleanText)
+        console.log("[Gemini] Extracted JSON string:", cleanText)
       } else {
-        console.log("[v0] No JSON object found in response")
+        console.log("[Gemini] No JSON object found in response")
         throw new Error("No JSON object found in AI response")
       }
 
       extractedData = JSON.parse(cleanText)
-      console.log("[v0] Successfully parsed JSON:", extractedData)
+      console.log("[Gemini] Successfully parsed JSON:", extractedData)
 
       const validateText = (text: string): boolean => {
         if (!text || typeof text !== "string") return false
@@ -167,7 +178,7 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
       const isValidText = validateText(extractedData.extracted_text || "")
       const validSections = (extractedData.text_sections || []).filter(validateSection)
 
-      console.log("[v0] Text validation results:", {
+      console.log("[Gemini] Text validation results:", {
         isValidText,
         originalSectionsCount: (extractedData.text_sections || []).length,
         validSectionsCount: validSections.length,
@@ -175,7 +186,7 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
 
       // If no valid content found, return appropriate message
       if (!isValidText && validSections.length === 0) {
-        console.log("[v0] No meaningful text found in image")
+        console.log("[Gemini] No meaningful text found in image")
         return Response.json({
           success: true,
           data: {
@@ -203,11 +214,11 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
               ],
       }
 
-      console.log("[v0] Returning validated data:", validatedData)
+      console.log("[Gemini] Returning validated data:", validatedData)
       return Response.json({ success: true, data: validatedData })
     } catch (parseError) {
-      console.error("[v0] JSON parsing error:", parseError)
-      console.error("[v0] Raw AI response:", result.text)
+      console.error("[Gemini] JSON parsing error:", parseError)
+      console.error("[Gemini] Raw AI response:", text)
 
       // Return default structure if parsing fails
       return Response.json({
@@ -219,7 +230,7 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`,
       })
     }
   } catch (error) {
-    console.error("[v0] Error analyzing tax image:", error)
+    console.error("[Gemini] Error analyzing tax image:", error)
     return Response.json({ success: false, error: "이미지 분석 중 오류가 발생했습니다." }, { status: 500 })
   }
 }

@@ -1,16 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { xai } from "@ai-sdk/xai"
-import { generateObject } from "ai"
-import { z } from "zod"
-
-const StationSchema = z.object({
-  station_name: z.string().describe("충전소 이름 또는 브랜드명"),
-  location: z.string().describe("충전소 위치 (도시, 구역, 지역명)"),
-  address: z.string().optional().describe("상세 주소 정보"),
-  status: z
-    .enum(["operating", "maintenance", "planned"])
-    .describe("충전소 운영 상태 - operating: 운영중, maintenance: 점검중, planned: 운영예정"),
-})
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,52 +10,73 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "이미지가 제공되지 않았습니다." }, { status: 400 })
     }
 
+    if (!process.env.GOOGLE_AI_API_KEY) {
+      console.error("[Gemini] GOOGLE_AI_API_KEY not found")
+      return NextResponse.json({ success: false, error: "AI 서비스가 설정되지 않았습니다." }, { status: 500 })
+    }
+
     // Convert image to base64
     const bytes = await image.arrayBuffer()
     const base64 = Buffer.from(bytes).toString("base64")
     const mimeType = image.type
 
-    const { object } = await generateObject({
-      model: xai("grok-2-vision-1212"),
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `이 이미지는 전기차 충전소 관련 사진입니다. 다음 정보를 추출해주세요:
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY)
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+
+    const prompt = `이 이미지는 전기차 충전소 관련 사진입니다. 다음 정보를 추출해주세요:
 
 1. 충전소명 (브랜드명, 회사명 등)
 2. 위치 (도시, 구역, 지역명)
 3. 상세 주소 (있다면)
 4. 운영 상태 (운영중, 점검중, 운영예정 중 하나)
 
-이미지에서 텍스트나 표지판을 읽어서 정확한 정보를 추출해주세요. 한국어로 응답해주세요.`,
-            },
-            {
-              type: "image",
-              image: `data:${mimeType};base64,${base64}`,
-            },
-          ],
-        },
-      ],
-      schema: StationSchema,
-      temperature: 0.1,
-    })
+이미지에서 텍스트나 표지판을 읽어서 정확한 정보를 추출해주세요. 한국어로 응답해주세요.
+
+반드시 다음 JSON 형식으로만 응답하세요:
+{
+  "station_name": "충전소명",
+  "location": "위치",
+  "address": "상세주소",
+  "status": "operating"
+}
+
+JSON 외에는 어떤 텍스트도 포함하지 마세요.`
+
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64,
+          mimeType: mimeType
+        }
+      }
+    ])
+
+    const response = await result.response
+    const text = response.text()
+
+    // Parse JSON response
+    let cleanText = text.trim()
+    cleanText = cleanText.replace(/```json\s*/g, "").replace(/```\s*/g, "")
+    
+    const jsonStart = cleanText.indexOf("{")
+    const jsonEnd = cleanText.lastIndexOf("}")
+    
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      cleanText = cleanText.substring(jsonStart, jsonEnd + 1)
+    }
+
+    const object = JSON.parse(cleanText)
 
     return NextResponse.json({
       success: true,
       data: object,
     })
   } catch (error) {
-    console.error("Station image analysis error:")
+    console.error("[Gemini] Station image analysis error:")
     try {
-      // Log minimal diagnostics
-      // @ts-ignore
       console.error("  message:", (error as any)?.message)
-      // @ts-ignore
       console.error("  status:", (error as any)?.status || (error as any)?.response?.status)
-      // @ts-ignore
       console.error("  code:", (error as any)?.code)
     } catch {}
     return NextResponse.json(
