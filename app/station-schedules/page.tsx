@@ -84,10 +84,18 @@ export default function StationSchedulesPage() {
       if (stationsData) {
         const cards: ScheduleCard[] = []
 
+        // 오늘 날짜 기준으로 신규 충전소 구분 (예: 최근 7일 이내)
+        const today = new Date()
+        const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+
         stationsData.forEach(station => {
           const existingSchedule = schedulesData?.find(s => s.station_id === station.id)
+          const stationCreatedAt = new Date(station.created_at)
           
-          if (!existingSchedule) {
+          // 신규 충전소: 최근 7일 이내에 생성되고 일정이 없는 경우
+          const isNewStation = stationCreatedAt > sevenDaysAgo && !existingSchedule
+          
+          if (isNewStation) {
             // 신규 충전소: 사업 일정 카드 생성
             // 사용 승인일 카드 (캐노피 설치된 경우에만)
             if (station.canopy_installed) {
@@ -108,7 +116,7 @@ export default function StationSchedulesPage() {
               date: null,
               completed: false
             })
-          } else {
+          } else if (existingSchedule) {
             // 기존 충전소: 취득세가 없는 경우에만 카드 추가
             const hasUseApproval = existingSchedule.use_approval_enabled && existingSchedule.use_approval_date
             const hasSafetyInspection = existingSchedule.safety_inspection_date
@@ -135,6 +143,7 @@ export default function StationSchedulesPage() {
               })
             }
           }
+          // 기존 충전소이지만 일정이 없는 경우는 카드 생성하지 않음
         })
 
         // 완료되지 않은 카드만 표시
