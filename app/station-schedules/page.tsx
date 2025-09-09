@@ -282,7 +282,7 @@ export default function StationSchedulesPage() {
         }
       }
 
-문제발견견      // 기존 일정 미입력 알림 삭제 (해당 충전소 관련)
+      // 기존 일정 미입력 알림 삭제 (해당 충전소 관련)
       if (date) {
         const { error: deleteError } = await supabase
           .from("notifications")
