@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { Suspense } from "react"
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -11,7 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
 import { CheckCircle, AlertCircle } from "lucide-react"
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -193,5 +194,21 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10 bg-background">
+        <div className="w-full max-w-sm">
+          <div className="text-center">
+            <p className="text-muted-foreground">로딩 중...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }
