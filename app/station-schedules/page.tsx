@@ -127,6 +127,40 @@ export default function StationSchedulesPage() {
         // 완료되지 않은 카드만 표시
         const incompleteCards = cards.filter(card => !card.completed)
         setScheduleCards(incompleteCards)
+
+        // 미입력 카드에 대한 알림 생성
+        for (const card of incompleteCards) {
+          const typeName = card.type === 'use_approval' ? '사용 승인일' : '안전 점검일'
+          
+          // 이미 해당 충전소의 미입력 알림이 있는지 확인
+          const { data: existingNotification } = await supabase
+            .from("notifications")
+            .select("id")
+            .eq("notification_type", "station_schedule")
+            .eq("is_sent", false)
+            .ilike("message", `%${card.station.station_name}%`)
+            .ilike("message", `%${typeName}%`)
+            .single()
+
+          // 기존 알림이 없으면 새로 생성
+          if (!existingNotification) {
+            const { error: notificationError } = await supabase
+              .from("notifications")
+              .insert([{
+                user_id: user.id,
+                title: "사업 일정 입력 필요",
+                message: `${card.station.station_name}의 ${typeName} 입력이 필요합니다.`,
+                notification_type: "station_schedule",
+                is_sent: false
+              }])
+            
+            if (notificationError) {
+              console.error("미입력 알림 생성 오류:", notificationError)
+            } else {
+              console.log(`미입력 알림 생성됨: ${card.station.station_name} ${typeName}`)
+            }
+          }
+        }
       }
 
     } catch (error) {
