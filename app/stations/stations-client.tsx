@@ -248,38 +248,51 @@ export function StationsClient() {
       setStations([data, ...stations])
       
       // 신규 충전소에 대한 사업 일정 알림 생성
+      console.log("=== 충전소 생성 성공, 알림 생성 시작 ===")
+      console.log("충전소 데이터:", data)
+      console.log("사용자 ID:", userId)
+      console.log("캐노피 설치 여부:", data.canopy_installed)
+      
       const notifications = []
       
       // 사용 승인일 알림 (캐노피 설치된 경우에만)
       if (data.canopy_installed) {
-        notifications.push({
+        const useApprovalNotification = {
           user_id: userId,
           title: "사업 일정 입력 필요",
           message: `${data.station_name}의 사용 승인일 입력이 필요합니다.`,
           type: "warning",
           read: false
-        })
+        }
+        notifications.push(useApprovalNotification)
+        console.log("사용 승인일 알림 추가:", useApprovalNotification)
       }
       
       // 안전 점검일 알림 (모든 충전소)
-      notifications.push({
+      const safetyInspectionNotification = {
         user_id: userId,
         title: "사업 일정 입력 필요",
         message: `${data.station_name}의 안전 점검일 입력이 필요합니다.`,
         type: "warning",
         read: false
-      })
+      }
+      notifications.push(safetyInspectionNotification)
+      console.log("안전 점검일 알림 추가:", safetyInspectionNotification)
+      
+      console.log("생성할 알림 목록:", notifications)
       
       // 알림 생성
-      const { error: notificationError } = await supabase
+      const { data: insertedNotifications, error: notificationError } = await supabase
         .from("notifications")
         .insert(notifications)
+        .select()
       
       if (notificationError) {
         console.error("사업 일정 알림 생성 오류:", notificationError)
         console.error("오류 상세:", JSON.stringify(notificationError, null, 2))
       } else {
-        console.log(`사업 일정 알림 생성됨: ${data.station_name} (${notifications.length}개)`)
+        console.log(`사업 일정 알림 생성 성공: ${data.station_name} (${notifications.length}개)`)
+        console.log("삽입된 알림:", insertedNotifications)
       }
       
       // audit log: create station
