@@ -136,8 +136,8 @@ export default function StationSchedulesPage() {
           const { data: existingNotification } = await supabase
             .from("notifications")
             .select("id")
-            .eq("notification_type", "station_schedule")
-            .eq("is_sent", false)
+            .eq("user_id", user.id)
+            .eq("title", "사업 일정 입력 필요")
             .ilike("message", `%${card.station.station_name}%`)
             .ilike("message", `%${typeName}%`)
             .single()
@@ -150,12 +150,13 @@ export default function StationSchedulesPage() {
                 user_id: user.id,
                 title: "사업 일정 입력 필요",
                 message: `${card.station.station_name}의 ${typeName} 입력이 필요합니다.`,
-                notification_type: "station_schedule",
-                is_sent: false
+                type: "warning",
+                read: false
               }])
             
             if (notificationError) {
               console.error("미입력 알림 생성 오류:", notificationError)
+              console.error("오류 상세:", JSON.stringify(notificationError, null, 2))
             } else {
               console.log(`미입력 알림 생성됨: ${card.station.station_name} ${typeName}`)
             }
@@ -321,8 +322,8 @@ export default function StationSchedulesPage() {
         const { error: deleteError } = await supabase
           .from("notifications")
           .delete()
-          .eq("notification_type", "station_schedule")
-          .eq("is_sent", false)
+          .eq("user_id", user.id)
+          .eq("title", "사업 일정 입력 필요")
           .ilike("message", `%${station.station_name}%`)
         
         if (deleteError) {
