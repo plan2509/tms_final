@@ -103,7 +103,8 @@ export async function POST(req: NextRequest) {
           station_name,
           location,
           address,
-          canopy_installed
+          canopy_installed,
+          created_at
         `)
       if (stationsErr) throw stationsErr
 
@@ -128,13 +129,19 @@ export async function POST(req: NextRequest) {
           // Check for missing use approval date (only for canopy stations)
           if (station.canopy_installed) {
             if (!existingSchedule || !existingSchedule.use_approval_enabled || !existingSchedule.use_approval_date) {
-              missingUseApprovalStations.push(station)
+              missingUseApprovalStations.push({
+                ...station,
+                missing_days: daysSinceCreation
+              })
             }
           }
           
           // Check for missing safety inspection date (all stations)
           if (!existingSchedule || !existingSchedule.safety_inspection_date) {
-            missingSafetyInspectionStations.push(station)
+            missingSafetyInspectionStations.push({
+              ...station,
+              missing_days: daysSinceCreation
+            })
           }
         }
       }
@@ -144,13 +151,13 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      let msg = `충전소 일정 알림 (생성 후 ${sched.days_before}일 경과)\n\n`
+      let msg = `🚨 충전소 일정 미입력 알림 (생성 후 ${sched.days_before}일 경과)\n\n`
       msg += "⚠️ 다음 충전소들의 일정 입력이 필요합니다:\n\n"
 
       if (missingUseApprovalStations.length > 0) {
         msg += `📋 사용 승인일 미입력 (캐노피 설치 충전소):\n`
         missingUseApprovalStations.forEach((station: any) => {
-          msg += `• ${station.station_name} - ${station.location}\n`
+          msg += `• ${station.station_name} - ${station.location} (${station.missing_days}일 경과)\n`
         })
         msg += "\n"
       }
@@ -158,12 +165,13 @@ export async function POST(req: NextRequest) {
       if (missingSafetyInspectionStations.length > 0) {
         msg += `🔍 안전 점검일 미입력:\n`
         missingSafetyInspectionStations.forEach((station: any) => {
-          msg += `• ${station.station_name} - ${station.location}\n`
+          msg += `• ${station.station_name} - ${station.location} (${station.missing_days}일 경과)\n`
         })
         msg += "\n"
       }
 
-      msg += `총 ${missingUseApprovalStations.length + missingSafetyInspectionStations.length}개 충전소의 일정 입력이 필요합니다.`
+      msg += `총 ${missingUseApprovalStations.length + missingSafetyInspectionStations.length}개 충전소의 일정 입력이 필요합니다.\n`
+      msg += `\n💡 사업 일정 페이지에서 해당 충전소들의 일정을 입력해주세요.`
 
       // Send teams to selected channel or all
       const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null

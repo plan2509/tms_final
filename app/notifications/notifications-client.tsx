@@ -1314,7 +1314,7 @@ export function NotificationsClient() {
                   onClick={async () => {
                     const name = prompt("스케줄 이름", "충전소 일정 리마인더")
                     if (!name) return
-                    const daysStr = prompt("충전소 생성 후 며칠이 지났을 때 알림(정수)\n\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시", "7") || "7"
+                    const daysStr = prompt("충전소 생성 후 며칠이 지났을 때 미입력 알림을 보낼지 설정하세요 (정수)\n\n예시:\n• 7: 충전소 생성 후 7일 경과 시 미입력 알림\n• 15: 충전소 생성 후 15일 경과 시 미입력 알림\n• 30: 충전소 생성 후 30일 경과 시 미입력 알림\n\n미입력 대상:\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시", "7") || "7"
                     const days = Number(daysStr)
                     const time = "10:00" // 매일 오전 10시로 고정
                     
@@ -1394,7 +1394,7 @@ export function NotificationsClient() {
                             const name = prompt("스케줄 이름", schedule.schedule_name) || schedule.schedule_name
                             const promptText = schedule.notification_type === 'tax' 
                               ? "세금 납부일 기준 며칠 전 알림(정수)"
-                              : "충전소 생성 후 며칠이 지났을 때 알림(정수)\n\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시"
+                              : "충전소 생성 후 며칠이 지났을 때 미입력 알림을 보낼지 설정하세요 (정수)\n\n예시:\n• 7: 충전소 생성 후 7일 경과 시 미입력 알림\n• 15: 충전소 생성 후 15일 경과 시 미입력 알림\n• 30: 충전소 생성 후 30일 경과 시 미입력 알림\n\n미입력 대상:\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시"
                             const days = Number(prompt(promptText, String(schedule.days_before)) || schedule.days_before)
                             const time = "10:00" // 매일 오전 10시로 고정
                             
