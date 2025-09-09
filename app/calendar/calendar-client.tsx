@@ -96,8 +96,14 @@ export function CalendarClient() {
   const [supabase, setSupabase] = useState<any>(null)
 
   useEffect(() => {
-    const client = createBrowserClient()
-    setSupabase(client)
+    try {
+      const client = createBrowserClient()
+      setSupabase(client)
+    } catch (error) {
+      console.error("Failed to initialize Supabase client:", error)
+      // 환경 변수가 없을 때의 fallback 처리
+      setSupabase(null)
+    }
   }, [])
 
   useEffect(() => {
@@ -252,6 +258,24 @@ export function CalendarClient() {
     )
   }
 
+  if (!supabase) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-8">
+          <h3 className="text-lg font-semibold text-red-600 mb-2">연결 오류</h3>
+          <p className="text-muted-foreground">데이터베이스 연결에 실패했습니다. 페이지를 새로고침해주세요.</p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            className="mt-4"
+            variant="outline"
+          >
+            새로고침
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Calendar Header */}
@@ -265,7 +289,7 @@ export function CalendarClient() {
               variant="outline"
               size="sm"
               onClick={() => navigateMonth("prev")}
-              className="border-2 border-gray-300 hover:bg-yellow-500 hover:text-black hover:border-yellow-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 text-white bg-transparent"
+              className="border-0 outline-none ring-0 shadow-none hover:bg-yellow-500 hover:text-black focus:border-0 focus:outline-none focus:ring-0 active:border-0 active:outline-none active:ring-0"
             >
               ‹
             </Button>
@@ -281,7 +305,7 @@ export function CalendarClient() {
               variant="outline"
               size="sm"
               onClick={() => navigateMonth("next")}
-              className="border-2 hover:bg-yellow-500 hover:text-black hover:border-yellow-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 text-white bg-transparent border-transparent"
+              className="border-0 outline-none ring-0 shadow-none hover:bg-yellow-500 hover:text-black focus:border-0 focus:outline-none focus:ring-0 active:border-0 active:outline-none active:ring-0"
             >
               ›
             </Button>

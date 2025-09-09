@@ -81,9 +81,16 @@ export function StatisticsClient() {
   const [isFiltered, setIsFiltered] = useState(false)
 
   useEffect(() => {
-    const client = createBrowserClient()
-    setSupabase(client)
-    fetchStatistics(client)
+    try {
+      const client = createBrowserClient()
+      setSupabase(client)
+      fetchStatistics(client)
+    } catch (error) {
+      console.error("Failed to initialize Supabase client:", error)
+      // 환경 변수가 없을 때의 fallback 처리
+      setSupabase(null)
+      setLoading(false)
+    }
   }, [])
 
   const fetchStatistics = async (client?: any, startDate?: Date, endDate?: Date) => {
@@ -293,6 +300,24 @@ export function StatisticsClient() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (!supabase) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-8">
+          <h3 className="text-lg font-semibold text-red-600 mb-2">연결 오류</h3>
+          <p className="text-muted-foreground">데이터베이스 연결에 실패했습니다. 페이지를 새로고침해주세요.</p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            className="mt-4"
+            variant="outline"
+          >
+            새로고침
+          </Button>
         </div>
       </div>
     )
