@@ -200,6 +200,7 @@ export async function POST(req: NextRequest) {
       .eq("notification_type", "manual")
       .eq("is_sent", false)
       .eq("notification_date", todayKst)
+      .eq("notification_time", "10:00")
 
     let dispatchedManual = 0
     if (pendingManuals && pendingManuals.length > 0) {
@@ -208,8 +209,8 @@ export async function POST(req: NextRequest) {
       ;(channels || []).forEach((c: any) => idToWebhook.set(c.id, c.webhook_url))
 
       for (const n of pendingManuals as any[]) {
-        // 매일 오전 10시에만 발송 (10:00-10:59 범위에서 체크)
-        if (hh !== "10") continue
+        // 매일 오전 10시에만 발송 (정확히 10:00-10:04 범위에서만)
+        if (hh !== "10" || parseInt(min) > 4) continue
 
         const msg = n.message as string
 
