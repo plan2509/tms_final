@@ -271,16 +271,15 @@ export function StationsClient() {
       })
       
       // 알림 생성
-      if (notifications.length > 0) {
-        const { error: notificationError } = await supabase
-          .from("notifications")
-          .insert(notifications)
-        
-        if (notificationError) {
-          console.error("사업 일정 알림 생성 오류:", notificationError)
-        } else {
-          console.log(`사업 일정 알림 생성됨: ${data.station_name} (${notifications.length}개)`)
-        }
+      const { error: notificationError } = await supabase
+        .from("notifications")
+        .insert(notifications)
+      
+      if (notificationError) {
+        console.error("사업 일정 알림 생성 오류:", notificationError)
+        console.error("오류 상세:", JSON.stringify(notificationError, null, 2))
+      } else {
+        console.log(`사업 일정 알림 생성됨: ${data.station_name} (${notifications.length}개)`)
       }
       
       // audit log: create station
