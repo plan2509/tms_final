@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, AlertTriangle, Save, Building2, CheckCircle, XCircle } from "lucide-react"
+import { Calendar, AlertTriangle, Save, Building2, CheckCircle, XCircle, Shield, Zap } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface ChargingStation {
@@ -33,11 +33,18 @@ interface StationWithSchedule extends ChargingStation {
   schedule?: StationSchedule
 }
 
+interface ScheduleCard {
+  id: string
+  station: ChargingStation
+  type: 'use_approval' | 'safety_inspection'
+  date: string | null
+  completed: boolean
+}
+
 export default function StationSchedulesPage() {
-  const [stations, setStations] = useState<StationWithSchedule[]>([])
-  const [schedules, setSchedules] = useState<StationSchedule[]>([])
+  const [scheduleCards, setScheduleCards] = useState<ScheduleCard[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [savingStationId, setSavingStationId] = useState<string | null>(null)
+  const [savingCardId, setSavingCardId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string>("viewer")
   const { toast } = useToast()
 
@@ -79,29 +86,38 @@ export default function StationSchedulesPage() {
         .select("*")
 
       if (stationsData) {
-        // 일정이 없는 충전소만 필터링
-        const stationsWithoutSchedules = stationsData.filter(station => 
-          !schedulesData?.some(schedule => schedule.station_id === station.id)
-        )
+        const cards: ScheduleCard[] = []
 
-        // 충전소와 일정 데이터 결합
-        const stationsWithSchedules = stationsWithoutSchedules.map(station => ({
-          ...station,
-          schedule: {
-            id: "",
-            station_id: station.id,
-            use_approval_enabled: false,
-            use_approval_date: null,
-            safety_inspection_date: null,
-            created_at: "",
-            updated_at: ""
+        stationsData.forEach(station => {
+          const existingSchedule = schedulesData?.find(s => s.station_id === station.id)
+          
+          // 신규 충전소에 대해서만 카드 생성 (기존 일정이 없는 경우)
+          if (!existingSchedule) {
+            // 사용 승인일 카드 (캐노피 설치된 경우에만)
+            if (station.canopy_installed) {
+              cards.push({
+                id: `${station.id}-use_approval`,
+                station,
+                type: 'use_approval',
+                date: null,
+                completed: false
+              })
+            }
+
+            // 안전 점검일 카드 (모든 충전소)
+            cards.push({
+              id: `${station.id}-safety_inspection`,
+              station,
+              type: 'safety_inspection',
+              date: null,
+              completed: false
+            })
           }
-        }))
-        setStations(stationsWithSchedules)
-      }
+        })
 
-      if (schedulesData) {
-        setSchedules(schedulesData)
+        // 완료되지 않은 카드만 표시
+        const incompleteCards = cards.filter(card => !card.completed)
+        setScheduleCards(incompleteCards)
       }
 
     } catch (error) {
@@ -116,88 +132,78 @@ export default function StationSchedulesPage() {
     }
   }
 
-  const handleScheduleChange = (stationId: string, field: string, value: any) => {
-    setStations(prev => prev.map(station => {
-      if (station.id === stationId) {
-        const updatedSchedule = {
-          ...station.schedule!,
-          [field]: value
-        }
+  const handleDateChange = (cardId: string, date: string) => {
+    setScheduleCards(prev => prev.map(card => {
+      if (card.id === cardId) {
         return {
-          ...station,
-          schedule: updatedSchedule
+          ...card,
+          date
         }
       }
-      return station
+      return card
     }))
   }
 
-  const handleSaveStation = async (station: StationWithSchedule) => {
-    if (!isAdmin) return
+  const handleSaveCard = async (card: ScheduleCard) => {
+    if (!isAdmin || !card.date) return
 
-    setSavingStationId(station.id)
+    setSavingCardId(card.id)
     try {
-      const { schedule } = station
-      if (!schedule) return
+      const { station, type, date } = card
 
-      const { use_approval_enabled, use_approval_date, safety_inspection_date } = schedule
-
-      // 유효성 검사 - 1개 날짜만 입력해도 저장 가능
-      let hasValidDate = false
-      
-      // 캐노피가 설치된 경우 사용 승인일 체크 (use_approval_enabled가 true이고 날짜가 입력된 경우)
-      if (station.canopy_installed && use_approval_enabled && use_approval_date) {
-        hasValidDate = true
-      }
-      
-      // 안전 점검일 체크 (항상 가능)
-      if (safety_inspection_date) {
-        hasValidDate = true
-      }
-      
-      // 캐노피가 없는 경우 안전 점검일은 자동으로 설정되므로 허용
-      if (!station.canopy_installed) {
-        hasValidDate = true
-      }
-
-      // 최소 1개 날짜는 입력되어야 함
-      if (!hasValidDate) {
-        toast({
-          title: "입력 필요",
-          description: "사용 승인일 또는 안전 점검일 중 최소 1개는 입력해주세요.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // 안전 점검일 자동 생성 (캐노피가 없는 경우)
-      let finalSafetyInspectionDate = safety_inspection_date
-      if (!station.canopy_installed && !safety_inspection_date) {
-        // 캐노피가 없는 경우 오늘 날짜로 안전 점검일 자동 설정
-        finalSafetyInspectionDate = new Date().toISOString().split('T')[0]
-      }
-
-      // 일정 생성
-      const { error } = await supabase
+      // 기존 일정 조회
+      const { data: existingSchedule } = await supabase
         .from("station_schedules")
-        .insert([{
-          station_id: station.id,
-          use_approval_enabled,
-          use_approval_date: use_approval_enabled ? use_approval_date : null,
-          safety_inspection_date: finalSafetyInspectionDate,
-        }])
+        .select("*")
+        .eq("station_id", station.id)
+        .single()
 
-      if (error) throw error
+      let scheduleData: any = {
+        station_id: station.id,
+        use_approval_enabled: false,
+        use_approval_date: null,
+        safety_inspection_date: null,
+      }
 
-      // 취득세 생성 (사용 승인일과 안전 점검일 각각)
-      
-      // 1. 사용 승인일 → 캐노피 취득세
-      if (use_approval_enabled && use_approval_date) {
-        const approvalDate = new Date(use_approval_date)
+      // 기존 일정이 있으면 기존 데이터 유지
+      if (existingSchedule) {
+        scheduleData = {
+          ...existingSchedule,
+          use_approval_enabled: existingSchedule.use_approval_enabled,
+          use_approval_date: existingSchedule.use_approval_date,
+          safety_inspection_date: existingSchedule.safety_inspection_date,
+        }
+      }
+
+      // 현재 카드 타입에 따라 데이터 업데이트
+      if (type === 'use_approval') {
+        scheduleData.use_approval_enabled = true
+        scheduleData.use_approval_date = date
+      } else if (type === 'safety_inspection') {
+        scheduleData.safety_inspection_date = date
+      }
+
+      // 일정 저장 또는 업데이트
+      if (existingSchedule) {
+        const { error } = await supabase
+          .from("station_schedules")
+          .update(scheduleData)
+          .eq("id", existingSchedule.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from("station_schedules")
+          .insert([scheduleData])
+        if (error) throw error
+      }
+
+      // 취득세 생성
+      if (type === 'use_approval' && date) {
+        // 캐노피 취득세 생성
+        const approvalDate = new Date(date)
         const dueDate = new Date(approvalDate)
-        dueDate.setDate(dueDate.getDate() + 60) // 60일 후
+        dueDate.setDate(dueDate.getDate() + 60)
 
-        // 기존 캐노피 취득세가 있는지 확인
         const { data: existingCanopyTax } = await supabase
           .from("taxes")
           .select("id")
@@ -222,18 +228,13 @@ export default function StationSchedulesPage() {
           } else {
             console.log(`캐노피 취득세 생성됨: ${station.station_name}`)
           }
-        } else {
-          console.log(`캐노피 취득세 이미 존재: ${station.station_name}`)
         }
-      }
-
-      // 2. 안전 점검일 → 충전기 취득세
-      if (finalSafetyInspectionDate) {
-        const inspectionDate = new Date(finalSafetyInspectionDate)
+      } else if (type === 'safety_inspection' && date) {
+        // 충전기 취득세 생성
+        const inspectionDate = new Date(date)
         const dueDate = new Date(inspectionDate)
-        dueDate.setDate(dueDate.getDate() + 60) // 60일 후
+        dueDate.setDate(dueDate.getDate() + 60)
 
-        // 기존 충전기 취득세가 있는지 확인
         const { data: existingChargerTax } = await supabase
           .from("taxes")
           .select("id")
@@ -258,31 +259,17 @@ export default function StationSchedulesPage() {
           } else {
             console.log(`충전기 취득세 생성됨: ${station.station_name}`)
           }
-        } else {
-          console.log(`충전기 취득세 이미 존재: ${station.station_name}`)
         }
       }
 
-      // 2개 날짜 모두 입력된 경우에만 리스트에서 제거
-      const hasUseApproval = use_approval_enabled && use_approval_date
-      const hasSafetyInspection = finalSafetyInspectionDate
-      
-      if (hasUseApproval && hasSafetyInspection) {
-        // 2개 날짜 모두 입력된 경우 리스트에서 제거
-        setStations(prev => prev.filter(s => s.id !== station.id))
-        toast({
-          title: "성공",
-          description: `${station.station_name} 일정이 완전히 저장되었습니다.`,
-        })
-      } else {
-        // 1개 날짜만 입력된 경우 리스트에서 제거하지 않음
-        toast({
-          title: "성공",
-          description: `${station.station_name} 일정이 부분적으로 저장되었습니다.`,
-        })
-      }
+      // 성공 메시지
+      const typeName = type === 'use_approval' ? '사용 승인일' : '안전 점검일'
+      toast({
+        title: "성공",
+        description: `${station.station_name} ${typeName}이 저장되었습니다.`,
+      })
 
-      // 데이터 새로고침 (저장된 일정이 있는 충전소는 리스트에서 제외)
+      // 데이터 새로고침 (완료된 카드는 리스트에서 제거됨)
       await fetchData()
 
     } catch (error) {
@@ -293,23 +280,27 @@ export default function StationSchedulesPage() {
         variant: "destructive",
       })
     } finally {
-      setSavingStationId(null)
+      setSavingCardId(null)
     }
   }
 
-  const getScheduleStatus = (station: StationWithSchedule) => {
-    const { schedule } = station
-    if (!schedule) return { status: "empty", message: "일정 미입력" }
-
-    const hasUseApproval = schedule.use_approval_enabled && schedule.use_approval_date
-    const hasSafetyInspection = schedule.safety_inspection_date
-
-    if (hasUseApproval && hasSafetyInspection) {
-      return { status: "complete", message: "완료" }
-    } else if (hasUseApproval || hasSafetyInspection) {
-      return { status: "partial", message: "부분 입력" }
+  const getCardInfo = (card: ScheduleCard) => {
+    if (card.type === 'use_approval') {
+      return {
+        title: '사용 승인일',
+        icon: Shield,
+        description: '캐노피 사용 승인일을 입력하세요',
+        taxInfo: '캐노피 취득세 자동 생성 (60일 후 납부 기한)',
+        color: 'blue'
+      }
     } else {
-      return { status: "empty", message: "미입력" }
+      return {
+        title: '안전 점검일',
+        icon: AlertTriangle,
+        description: '안전 점검일을 입력하세요',
+        taxInfo: '충전기 취득세 자동 생성 (60일 후 납부 기한)',
+        color: 'orange'
+      }
     }
   }
 
@@ -336,102 +327,67 @@ export default function StationSchedulesPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {stations.map((station) => {
-          const scheduleStatus = getScheduleStatus(station)
-          const { schedule } = station
+        {scheduleCards.map((card) => {
+          const cardInfo = getCardInfo(card)
+          const IconComponent = cardInfo.icon
 
           return (
-            <Card key={station.id} className="relative">
+            <Card key={card.id} className="relative">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    <span>{station.station_name}</span>
+                    <IconComponent className={`h-4 w-4 ${
+                      cardInfo.color === 'blue' 
+                        ? 'text-blue-600' 
+                        : 'text-orange-600'
+                    }`} />
+                    <span>{cardInfo.title}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {station.canopy_installed && (
+                    {card.station.canopy_installed && card.type === 'use_approval' && (
                       <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
                         캐노피
                       </Badge>
                     )}
-                    <Badge 
-                      className={
-                        scheduleStatus.status === "complete" 
-                          ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                          : scheduleStatus.status === "partial"
-                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
-                          : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-                      }
-                    >
-                      {scheduleStatus.message}
+                    <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
+                      {card.station.station_name}
                     </Badge>
                   </div>
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">{station.location}</p>
+                <p className="text-sm text-muted-foreground">{card.station.location}</p>
+                <p className="text-xs text-muted-foreground">{cardInfo.description}</p>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* 사용 승인일 - 캐노피 설치된 경우에만 표시 */}
-                {station.canopy_installed && (
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1 text-sm">
-                      <Calendar className="h-3 w-3" />
-                      사용 승인일 *
-                    </Label>
-                    <Input 
-                      type="date"
-                      value={schedule?.use_approval_date || ""}
-                      onChange={(e) => {
-                        const dateValue = e.target.value
-                        // 사용 승인일을 입력하면 자동으로 use_approval_enabled를 true로 설정
-                        if (dateValue) {
-                          handleScheduleChange(station.id, "use_approval_enabled", true)
-                        }
-                        handleScheduleChange(station.id, "use_approval_date", dateValue)
-                      }}
-                      disabled={!isAdmin}
-                      className="text-sm"
-                    />
-                    <p className="text-xs text-blue-600 dark:text-blue-400">
-                      ✓ 사용 승인일 입력 시 캐노피 취득세 자동 생성 (60일 후 납부 기한)
-                    </p>
-                  </div>
-                )}
-
-                {/* 안전 점검일 - 항상 표시 */}
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1 text-sm">
-                    <AlertTriangle className="h-3 w-3" />
-                    안전 점검일 *
+                    <Calendar className="h-3 w-3" />
+                    날짜 입력 *
                   </Label>
                   <Input 
                     type="date"
-                    value={schedule?.safety_inspection_date || ""}
-                    onChange={(e) => 
-                      handleScheduleChange(station.id, "safety_inspection_date", e.target.value)
-                    }
+                    value={card.date || ""}
+                    onChange={(e) => handleDateChange(card.id, e.target.value)}
                     disabled={!isAdmin}
                     className="text-sm"
                   />
-                  {!station.canopy_installed ? (
-                    <p className="text-xs text-green-600 dark:text-green-400">
-                      ✓ 캐노피 미설치: 저장 시 오늘 날짜로 자동 설정
-                    </p>
-                  ) : (
-                    <p className="text-xs text-orange-600 dark:text-orange-400">
-                      ✓ 안전 점검일 입력 시 충전기 취득세 자동 생성 (60일 후 납부 기한)
-                    </p>
-                  )}
+                  <p className={`text-xs ${
+                    cardInfo.color === 'blue' 
+                      ? 'text-blue-600 dark:text-blue-400' 
+                      : 'text-orange-600 dark:text-orange-400'
+                  }`}>
+                    ✓ {cardInfo.taxInfo}
+                  </p>
                 </div>
 
                 {/* 저장 버튼 */}
                 <div className="pt-2">
                   <Button 
-                    onClick={() => handleSaveStation(station)}
-                    disabled={!isAdmin || savingStationId === station.id}
+                    onClick={() => handleSaveCard(card)}
+                    disabled={!isAdmin || !card.date || savingCardId === card.id}
                     className="w-full gap-2"
                   >
                     <Save className="h-4 w-4" />
-                    {savingStationId === station.id ? "저장 중..." : "저장"}
+                    {savingCardId === card.id ? "저장 중..." : "저장"}
                   </Button>
                 </div>
               </CardContent>
@@ -440,13 +396,13 @@ export default function StationSchedulesPage() {
         })}
       </div>
 
-      {stations.length === 0 && (
+      {scheduleCards.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">모든 충전소 일정이 등록되었습니다</h3>
+            <h3 className="text-lg font-semibold mb-2">모든 일정이 등록되었습니다</h3>
             <p className="text-muted-foreground text-center">
-              새로운 충전소가 등록되면 여기에 표시됩니다.
+              새로운 충전소가 등록되거나 일정이 필요하면 여기에 표시됩니다.
             </p>
           </CardContent>
         </Card>
