@@ -88,11 +88,18 @@ export default function StationSchedulesPage() {
       if (stationsData) {
         const cards: ScheduleCard[] = []
 
+        // 오늘 날짜 기준으로 신규 충전소 구분 (예: 최근 7일 이내)
+        const today = new Date()
+        const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+
         stationsData.forEach(station => {
           const existingSchedule = schedulesData?.find(s => s.station_id === station.id)
+          const stationCreatedAt = new Date(station.created_at)
           
-          // 신규 충전소에 대해서만 카드 생성 (기존 일정이 없는 경우)
-          if (!existingSchedule) {
+          // 신규 충전소: 최근 7일 이내에 생성되고 일정이 없는 경우
+          const isNewStation = stationCreatedAt > sevenDaysAgo && !existingSchedule
+          
+          if (isNewStation) {
             // 사용 승인일 카드 (캐노피 설치된 경우에만)
             if (station.canopy_installed) {
               cards.push({
