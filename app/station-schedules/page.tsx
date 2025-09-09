@@ -282,7 +282,23 @@ export default function StationSchedulesPage() {
         }
       }
 
-      // 알림 생성
+문제발견견      // 기존 일정 미입력 알림 삭제 (해당 충전소 관련)
+      if (date) {
+        const { error: deleteError } = await supabase
+          .from("notifications")
+          .delete()
+          .eq("notification_type", "station_schedule")
+          .eq("is_sent", false)
+          .ilike("message", `%${station.station_name}%`)
+        
+        if (deleteError) {
+          console.error("기존 미입력 알림 삭제 오류:", deleteError)
+        } else {
+          console.log(`기존 미입력 알림 삭제됨: ${station.station_name}`)
+        }
+      }
+
+      // 알림 생성 (사업 일정 등록 완료 알림)
       if (date) {
         const typeName = type === 'use_approval' ? '사용 승인일' : '안전 점검일'
         const { error: notificationError } = await supabase
@@ -298,7 +314,7 @@ export default function StationSchedulesPage() {
         if (notificationError) {
           console.error("Notification creation error:", notificationError)
         } else {
-          console.log(`알림 생성됨: ${station.station_name} ${typeName}`)
+          console.log(`사업 일정 등록 완료 알림 생성됨: ${station.station_name} ${typeName}`)
         }
       }
 
