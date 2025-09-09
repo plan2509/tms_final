@@ -52,13 +52,21 @@ function Calendar({
           defaultClassNames.nav
         ),
         button_previous: cn(
-          buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none !border-0 !outline-none !ring-0 !shadow-none hover:!border-0 focus:!border-0 focus:!outline-none focus:!ring-0 active:!border-0",
+          "inline-flex items-center justify-center whitespace-nowrap text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0",
+          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none",
+          "border-0 outline-none ring-0 shadow-none",
+          "hover:bg-accent hover:text-accent-foreground",
+          "focus:border-0 focus:outline-none focus:ring-0",
+          "active:border-0 active:outline-none active:ring-0",
           defaultClassNames.button_previous
         ),
         button_next: cn(
-          buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none !border-0 !outline-none !ring-0 !shadow-none hover:!border-0 focus:!border-0 focus:!outline-none focus:!ring-0 active:!border-0",
+          "inline-flex items-center justify-center whitespace-nowrap text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0",
+          "size-(--cell-size) aria-disabled:opacity-50 p-0 select-none",
+          "border-0 outline-none ring-0 shadow-none",
+          "hover:bg-accent hover:text-accent-foreground",
+          "focus:border-0 focus:outline-none focus:ring-0",
+          "active:border-0 active:outline-none active:ring-0",
           defaultClassNames.button_next
         ),
         month_caption: cn(

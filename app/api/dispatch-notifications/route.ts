@@ -77,11 +77,17 @@ export async function POST(req: NextRequest) {
       const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
       const targets = targetWebhook ? [targetWebhook] : webhooksAll
       if (targets.length > 0) {
-        await Promise.all(
+        const sendResults = await Promise.allSettled(
           targets.map((url: string) =>
             fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
           ),
         )
+        
+        // Check for failed sends
+        const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
+        if (failedSends.length > 0) {
+          console.error(`[Tax Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
+        }
       }
 
       dispatched += taxes.length
@@ -163,11 +169,17 @@ export async function POST(req: NextRequest) {
       const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
       const targets = targetWebhook ? [targetWebhook] : webhooksAll
       if (targets.length > 0) {
-        await Promise.all(
+        const sendResults = await Promise.allSettled(
           targets.map((url: string) =>
             fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
           ),
         )
+        
+        // Check for failed sends
+        const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
+        if (failedSends.length > 0) {
+          console.error(`[Station Schedule Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
+        }
       }
 
       dispatchedStation += missingUseApprovalStations.length + missingSafetyInspectionStations.length
@@ -218,19 +230,40 @@ export async function POST(req: NextRequest) {
         // Send teams to selected channel or all
         const targetWebhook = n.teams_channel_id ? idToWebhook.get(n.teams_channel_id) : null
         const targets = targetWebhook ? [targetWebhook] : webhooksAll
+        let sendSuccess = true
+        
         if (targets.length > 0) {
-          await Promise.all(
+          const sendResults = await Promise.allSettled(
             targets.map((url: string) =>
               fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
             ),
           )
+          
+          // Check for failed sends
+          const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
+          if (failedSends.length > 0) {
+            console.error(`[Manual Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages for notification ${n.id}`)
+            sendSuccess = false
+          }
         }
 
-        // Mark as sent
-        await supabase
-          .from("notifications")
-          .update({ is_sent: true, sent_at: new Date().toISOString() })
-          .eq("id", n.id)
+        // Mark as sent only if successful
+        if (sendSuccess) {
+          await supabase
+            .from("notifications")
+            .update({ is_sent: true, sent_at: new Date().toISOString() })
+            .eq("id", n.id)
+        } else {
+          // Mark as failed
+          await supabase
+            .from("notifications")
+            .update({ 
+              is_sent: false, 
+              error_message: "Teams 발송 실패",
+              last_attempt_at: new Date().toISOString() 
+            })
+            .eq("id", n.id)
+        }
 
         dispatchedManual++
       }

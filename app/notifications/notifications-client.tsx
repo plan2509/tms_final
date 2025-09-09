@@ -28,6 +28,8 @@ interface Notification {
   sent_at: string | null
   teams_channel_id: string | null
   created_at: string
+  error_message?: string | null
+  last_attempt_at?: string | null
   taxes?: {
     id: string
     tax_type: string
@@ -215,7 +217,9 @@ export function NotificationsClient() {
       if (filterStatus === "sent") {
         filtered = filtered.filter((n) => n.is_sent)
       } else if (filterStatus === "pending") {
-        filtered = filtered.filter((n) => !n.is_sent)
+        filtered = filtered.filter((n) => !n.is_sent && !n.error_message)
+      } else if (filterStatus === "failed") {
+        filtered = filtered.filter((n) => !n.is_sent && n.error_message)
       }
     }
 
@@ -339,6 +343,10 @@ export function NotificationsClient() {
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 text-xs">
                   발송 완료
                 </Badge>
+              ) : notification.error_message ? (
+                <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 text-xs">
+                  발송 실패
+                </Badge>
               ) : (
                 <Badge variant="outline" className="text-xs">
                   발송 대기
@@ -358,6 +366,23 @@ export function NotificationsClient() {
               발송일: {new Date(notification.sent_at).toLocaleString("ko-KR")}
             </div>
           )}
+          
+          {notification.error_message && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+              <div className="flex items-center gap-1 text-xs text-red-700 font-medium">
+                <AlertTriangle className="w-3 h-3" />
+                발송 실패
+              </div>
+              <div className="text-xs text-red-600 mt-1">
+                {notification.error_message}
+              </div>
+              {notification.last_attempt_at && (
+                <div className="text-xs text-red-500 mt-1">
+                  마지막 시도: {new Date(notification.last_attempt_at).toLocaleString("ko-KR")}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions for admins */}
           {isAdmin && (
@@ -369,7 +394,7 @@ export function NotificationsClient() {
                   disabled={isActionLoading}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  발송
+                  {notification.error_message ? "재시도" : "발송"}
                 </Button>
               )}
               <Button
@@ -1014,8 +1039,11 @@ export function NotificationsClient() {
           </div>
 
           <Tabs defaultValue="all" className="space-y-4">
-            <TabsList className="hidden">
+            <TabsList>
               <TabsTrigger value="all">모든 알림 ({filteredAndSortedNotifications.length})</TabsTrigger>
+              <TabsTrigger value="sent">발송 완료</TabsTrigger>
+              <TabsTrigger value="pending">발송 대기</TabsTrigger>
+              <TabsTrigger value="failed">발송 실패</TabsTrigger>
             </TabsList>
 
             <TabsContent value="all" className="space-y-6">
@@ -1039,6 +1067,99 @@ export function NotificationsClient() {
                   </div>
                 ))
               )}
+            </TabsContent>
+
+            <TabsContent value="sent" className="space-y-6">
+              {(() => {
+                const sentNotifications = filteredAndSortedNotifications.filter(n => n.is_sent)
+                const sentGroups = sentNotifications.reduce((groups: { [key: string]: Notification[] }, notification) => {
+                  const date = new Date(notification.notification_date).toLocaleDateString("ko-KR")
+                  if (!groups[date]) groups[date] = []
+                  groups[date].push(notification)
+                  return groups
+                }, {})
+
+                return Object.keys(sentGroups).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">발송 완료된 알림이 없습니다.</div>
+                ) : (
+                  Object.entries(sentGroups).map(([date, dateNotifications]) => (
+                    <div key={date} className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-medium text-muted-foreground">{date}</h3>
+                        <div className="flex-1 h-px bg-border"></div>
+                        <span className="text-xs text-muted-foreground">{dateNotifications.length}개</span>
+                      </div>
+                      <div className="grid gap-3">
+                        {dateNotifications.map((notification) => (
+                          <NotificationCard key={notification.id} notification={notification} variant="sent" />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )
+              })()}
+            </TabsContent>
+
+            <TabsContent value="pending" className="space-y-6">
+              {(() => {
+                const pendingNotifications = filteredAndSortedNotifications.filter(n => !n.is_sent && !n.error_message)
+                const pendingGroups = pendingNotifications.reduce((groups: { [key: string]: Notification[] }, notification) => {
+                  const date = new Date(notification.notification_date).toLocaleDateString("ko-KR")
+                  if (!groups[date]) groups[date] = []
+                  groups[date].push(notification)
+                  return groups
+                }, {})
+
+                return Object.keys(pendingGroups).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">발송 대기 중인 알림이 없습니다.</div>
+                ) : (
+                  Object.entries(pendingGroups).map(([date, dateNotifications]) => (
+                    <div key={date} className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-medium text-muted-foreground">{date}</h3>
+                        <div className="flex-1 h-px bg-border"></div>
+                        <span className="text-xs text-muted-foreground">{dateNotifications.length}개</span>
+                      </div>
+                      <div className="grid gap-3">
+                        {dateNotifications.map((notification) => (
+                          <NotificationCard key={notification.id} notification={notification} variant="unread" />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )
+              })()}
+            </TabsContent>
+
+            <TabsContent value="failed" className="space-y-6">
+              {(() => {
+                const failedNotifications = filteredAndSortedNotifications.filter(n => !n.is_sent && n.error_message)
+                const failedGroups = failedNotifications.reduce((groups: { [key: string]: Notification[] }, notification) => {
+                  const date = new Date(notification.notification_date).toLocaleDateString("ko-KR")
+                  if (!groups[date]) groups[date] = []
+                  groups[date].push(notification)
+                  return groups
+                }, {})
+
+                return Object.keys(failedGroups).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">발송 실패한 알림이 없습니다.</div>
+                ) : (
+                  Object.entries(failedGroups).map(([date, dateNotifications]) => (
+                    <div key={date} className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-medium text-muted-foreground">{date}</h3>
+                        <div className="flex-1 h-px bg-border"></div>
+                        <span className="text-xs text-muted-foreground">{dateNotifications.length}개</span>
+                      </div>
+                      <div className="grid gap-3">
+                        {dateNotifications.map((notification) => (
+                          <NotificationCard key={notification.id} notification={notification} />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )
+              })()}
             </TabsContent>
           </Tabs>
         </TabsContent>
