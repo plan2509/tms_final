@@ -145,7 +145,18 @@ export default function StationSchedulesPage() {
   }
 
   const handleSaveCard = async (card: ScheduleCard) => {
-    if (!isAdmin || !card.date) return
+    if (!isAdmin) return
+
+    // 날짜 입력 유효성 검사
+    if (!card.date || card.date.trim() === '') {
+      const typeName = card.type === 'use_approval' ? '사용 승인일' : '안전 점검일'
+      toast({
+        title: "입력 필요",
+        description: `${typeName}을 입력해주세요.`,
+        variant: "destructive",
+      })
+      return
+    }
 
     setSavingCardId(card.id)
     try {
@@ -369,6 +380,8 @@ export default function StationSchedulesPage() {
                     onChange={(e) => handleDateChange(card.id, e.target.value)}
                     disabled={!isAdmin}
                     className="text-sm"
+                    placeholder="날짜를 선택하세요"
+                    required
                   />
                   <p className={`text-xs ${
                     cardInfo.color === 'blue' 
