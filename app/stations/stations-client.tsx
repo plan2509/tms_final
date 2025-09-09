@@ -258,11 +258,15 @@ export function StationsClient() {
       // 사용 승인일 알림 (캐노피 설치된 경우에만)
       if (data.canopy_installed) {
         const useApprovalNotification = {
-          user_id: userId,
-          title: "사업 일정 입력 필요",
+          tax_id: null,
+          notification_type: "manual",
+          schedule_id: null,
+          notification_date: new Date().toISOString().split('T')[0],
+          notification_time: "10:00",
           message: `${data.station_name}의 사용 승인일 입력이 필요합니다.`,
-          type: "warning",
-          read: false
+          is_sent: false,
+          sent_at: null,
+          teams_channel_id: null
         }
         notifications.push(useApprovalNotification)
         console.log("사용 승인일 알림 추가:", useApprovalNotification)
@@ -270,11 +274,15 @@ export function StationsClient() {
       
       // 안전 점검일 알림 (모든 충전소)
       const safetyInspectionNotification = {
-        user_id: userId,
-        title: "사업 일정 입력 필요",
+        tax_id: null,
+        notification_type: "manual",
+        schedule_id: null,
+        notification_date: new Date().toISOString().split('T')[0],
+        notification_time: "10:00",
         message: `${data.station_name}의 안전 점검일 입력이 필요합니다.`,
-        type: "warning",
-        read: false
+        is_sent: false,
+        sent_at: null,
+        teams_channel_id: null
       }
       notifications.push(safetyInspectionNotification)
       console.log("안전 점검일 알림 추가:", safetyInspectionNotification)
