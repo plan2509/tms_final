@@ -246,6 +246,43 @@ export function StationsClient() {
       })
     } else {
       setStations([data, ...stations])
+      
+      // 신규 충전소에 대한 사업 일정 알림 생성
+      const notifications = []
+      
+      // 사용 승인일 알림 (캐노피 설치된 경우에만)
+      if (data.canopy_installed) {
+        notifications.push({
+          user_id: userId,
+          title: "사업 일정 입력 필요",
+          message: `${data.station_name}의 사용 승인일 입력이 필요합니다.`,
+          type: "warning",
+          read: false
+        })
+      }
+      
+      // 안전 점검일 알림 (모든 충전소)
+      notifications.push({
+        user_id: userId,
+        title: "사업 일정 입력 필요",
+        message: `${data.station_name}의 안전 점검일 입력이 필요합니다.`,
+        type: "warning",
+        read: false
+      })
+      
+      // 알림 생성
+      if (notifications.length > 0) {
+        const { error: notificationError } = await supabase
+          .from("notifications")
+          .insert(notifications)
+        
+        if (notificationError) {
+          console.error("사업 일정 알림 생성 오류:", notificationError)
+        } else {
+          console.log(`사업 일정 알림 생성됨: ${data.station_name} (${notifications.length}개)`)
+        }
+      }
+      
       // audit log: create station
       logAudit({
         menu: "stations",
