@@ -208,8 +208,8 @@ export async function POST(req: NextRequest) {
       ;(channels || []).forEach((c: any) => idToWebhook.set(c.id, c.webhook_url))
 
       for (const n of pendingManuals as any[]) {
-        // 매일 오전 10시에만 발송
-        if (nowHm !== "10:00") continue
+        // 매일 오전 10시에만 발송 (10:00-10:59 범위에서 체크)
+        if (hh !== "10") continue
 
         const msg = n.message as string
 
