@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-// removed role selection UI; role is fixed to 'viewer'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -17,7 +17,8 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("")
   const [repeatPassword, setRepeatPassword] = useState("")
   const [name, setName] = useState("")
-  const [role] = useState<"viewer" | "admin">("viewer")
+  const [role, setRole] = useState<"viewer" | "admin" | "business_development">("viewer")
+  const [adminPassword, setAdminPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
@@ -60,6 +61,13 @@ export default function SignUpPage() {
       return
     }
 
+    // 관리자 권한 설정 시 비밀번호 확인
+    if (role !== "viewer" && adminPassword !== "221114") {
+      setError("관리자 권한 설정을 위해 올바른 비밀번호를 입력해주세요.")
+      setIsLoading(false)
+      return
+    }
+
     try {
       console.log("[v0] Creating Supabase client")
       const supabase = createClient()
@@ -80,7 +88,7 @@ export default function SignUpPage() {
           emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/dashboard`,
           data: {
             name: name.trim(),
-            role: "viewer",
+            role: role,
           },
         },
       })
@@ -168,7 +176,35 @@ export default function SignUpPage() {
                       onChange={(e) => setEmail(e.target.value)}
                     />
                   </div>
-                  {/* 권한 선택 제거: 모든 신규 사용자는 뷰어로 생성 */}
+                  <div className="grid gap-2">
+                    <Label htmlFor="role">권한</Label>
+                    <Select value={role} onValueChange={(value: "viewer" | "admin" | "business_development") => setRole(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="권한을 선택하세요" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="viewer">뷰어</SelectItem>
+                        <SelectItem value="business_development">사업 개발</SelectItem>
+                        <SelectItem value="admin">관리자</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      관리자 권한 설정 시 비밀번호가 필요합니다.
+                    </p>
+                  </div>
+                  {role !== "viewer" && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="adminPassword">관리자 비밀번호</Label>
+                      <Input
+                        id="adminPassword"
+                        type="password"
+                        placeholder="관리자 비밀번호를 입력하세요"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        required
+                      />
+                    </div>
+                  )}
                   <div className="grid gap-2">
                     <Label htmlFor="password">비밀번호</Label>
                     <Input

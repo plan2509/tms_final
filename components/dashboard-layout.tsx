@@ -23,19 +23,28 @@ interface DashboardLayoutProps {
 }
 
 const navigation = [
-  { name: "대시보드", href: "/dashboard", icon: Home },
-  { name: "충전소", href: "/stations", icon: Building2 },
-  { name: "세금", href: "/taxes", icon: Receipt },
-  { name: "알림", href: "/notifications", icon: Bell },
-  { name: "통계", href: "/statistics", icon: BarChart3 },
-  { name: "캘린더", href: "/calendar", icon: Calendar },
-  { name: "설정", href: "/settings", icon: Settings },
+  { name: "대시보드", href: "/dashboard", icon: Home, roles: ["admin", "viewer", "business_development"] },
+  { name: "충전소", href: "/stations", icon: Building2, roles: ["admin", "viewer", "business_development"] },
+  { name: "사업 일정", href: "/station-schedules", icon: Calendar, roles: ["admin", "business_development"] },
+  { name: "세금", href: "/taxes", icon: Receipt, roles: ["admin", "viewer"] },
+  { name: "알림", href: "/notifications", icon: Bell, roles: ["admin"] },
+  { name: "통계", href: "/statistics", icon: BarChart3, roles: ["admin", "viewer", "business_development"] },
+  { name: "캘린더", href: "/calendar", icon: Calendar, roles: ["admin", "viewer"] },
+  { name: "설정", href: "/settings", icon: Settings, roles: ["admin", "viewer", "business_development"] },
 ]
 
 export function DashboardLayout({ children, user }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+
+  // 권한별 접근 가능한 메뉴 필터링
+  const getAccessibleMenus = () => {
+    const userRole = user.role || "viewer"
+    return navigation.filter(item => item.roles.includes(userRole))
+  }
+
+  const accessibleMenus = getAccessibleMenus()
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -58,7 +67,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-8">
-              {navigation.map((item) => {
+              {accessibleMenus.map((item) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
@@ -80,7 +89,10 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
               <div className="hidden sm:flex items-center space-x-3">
                 <div className="text-right">
                   <p className="text-sm font-medium typo-body text-foreground">{user.name || "사용자"}</p>
-                  <p className="text-xs typo-body text-muted-foreground">{user.role === "admin" ? "관리자" : "뷰어"}</p>
+                  <p className="text-xs typo-body text-muted-foreground">
+                    {user.role === "admin" ? "관리자" : 
+                     user.role === "business_development" ? "사업 개발" : "뷰어"}
+                  </p>
                 </div>
                 <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center">
                   <User className="h-4 w-4 text-accent-foreground" />
@@ -111,7 +123,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
                     <nav className="flex-1 py-6">
                       <div className="space-y-2">
-                        {navigation.map((item) => {
+                        {accessibleMenus.map((item) => {
                           const isActive = pathname === item.href
                           return (
                             <Link

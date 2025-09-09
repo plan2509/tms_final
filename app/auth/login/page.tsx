@@ -106,14 +106,24 @@ export default function LoginPage() {
                     {isLoading ? "로그인 중..." : "로그인"}
                   </Button>
                 </div>
-                <div className="mt-4 text-center text-sm">
-                  계정이 없으신가요?{" "}
-                  <Link
-                    href="/auth/sign-up"
-                    className="underline underline-offset-4 text-primary hover:text-primary/80"
-                  >
-                    회원가입
-                  </Link>
+                <div className="mt-4 text-center text-sm space-y-2">
+                  <div>
+                    계정이 없으신가요?{" "}
+                    <Link
+                      href="/auth/sign-up"
+                      className="underline underline-offset-4 text-primary hover:text-primary/80"
+                    >
+                      회원가입
+                    </Link>
+                  </div>
+                  <div>
+                    <Link
+                      href="/auth/forgot-password"
+                      className="underline underline-offset-4 text-primary hover:text-primary/80"
+                    >
+                      비밀번호를 잊으셨나요?
+                    </Link>
+                  </div>
                 </div>
               </form>
             </CardContent>

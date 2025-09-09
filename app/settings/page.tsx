@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 
 interface User {
@@ -18,6 +20,14 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  const [passwordChanging, setPasswordChanging] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  })
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
@@ -65,6 +75,44 @@ export default function SettingsPage() {
     getUser()
   }, [supabase])
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordError(null)
+    setPasswordSuccess(false)
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError("새 비밀번호가 일치하지 않습니다.")
+      return
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordError("새 비밀번호는 최소 6자 이상이어야 합니다.")
+      return
+    }
+
+    setPasswordChanging(true)
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: passwordForm.newPassword
+      })
+
+      if (error) {
+        throw error
+      }
+
+      setPasswordSuccess(true)
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: ""
+      })
+    } catch (error: unknown) {
+      setPasswordError(error instanceof Error ? error.message : "비밀번호 변경 중 오류가 발생했습니다.")
+    } finally {
+      setPasswordChanging(false)
+    }
+  }
+
   const handleRoleChange = async () => {
     if (!user) return
 
@@ -79,7 +127,14 @@ export default function SettingsPage() {
 
     setUpdating(true)
     try {
-      const newRole = user.role === "viewer" ? "admin" : "viewer"
+      let newRole: "viewer" | "admin" | "business_development"
+      if (user.role === "viewer") {
+        newRole = "admin"
+      } else if (user.role === "admin") {
+        newRole = "business_development"
+      } else {
+        newRole = "viewer"
+      }
 
       const { error } = await supabase.from("users").upsert({
         id: user.id,
@@ -94,7 +149,12 @@ export default function SettingsPage() {
       } else {
         console.log("[v0] Role changed successfully to:", newRole)
         setUser({ ...user, role: newRole })
-        alert(`권한이 ${newRole === "admin" ? "관리자" : "뷰어"}로 변경되었습니다.`)
+        const roleNames = {
+          admin: "관리자",
+          business_development: "사업 개발",
+          viewer: "뷰어"
+        }
+        alert(`권한이 ${roleNames[newRole]}로 변경되었습니다.`)
         router.refresh()
       }
     } catch (error) {
@@ -138,7 +198,8 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">{user?.email}</p>
               </div>
               <Badge variant={user?.role === "admin" ? "default" : "secondary"}>
-                {user?.role === "admin" ? "관리자" : "뷰어"}
+                {user?.role === "admin" ? "관리자" : 
+                 user?.role === "business_development" ? "사업 개발" : "뷰어"}
               </Badge>
             </div>
 
@@ -147,14 +208,62 @@ export default function SettingsPage() {
                 <div>
                   <p className="font-medium">권한 변경</p>
                   <p className="text-sm text-muted-foreground">
-                    현재 권한: {user?.role === "admin" ? "관리자" : "뷰어"}
+                    현재 권한: {user?.role === "admin" ? "관리자" : 
+                               user?.role === "business_development" ? "사업 개발" : "뷰어"}
                   </p>
                 </div>
                 <Button onClick={handleRoleChange} disabled={updating} variant="outline">
-                  {updating ? "변경 중..." : user?.role === "admin" ? "뷰어로 변경" : "관리자로 변경"}
+                  {updating ? "변경 중..." : 
+                   user?.role === "viewer" ? "관리자로 변경" :
+                   user?.role === "admin" ? "사업 개발로 변경" : "뷰어로 변경"}
                 </Button>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>비밀번호 변경</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="newPassword">새 비밀번호</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  placeholder="최소 6자 이상"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="confirmPassword">비밀번호 확인</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  placeholder="비밀번호를 다시 입력하세요"
+                  required
+                />
+              </div>
+              {passwordError && (
+                <div className="text-sm text-red-500 bg-red-500/10 p-3 rounded-md">
+                  {passwordError}
+                </div>
+              )}
+              {passwordSuccess && (
+                <div className="text-sm text-green-500 bg-green-500/10 p-3 rounded-md">
+                  비밀번호가 성공적으로 변경되었습니다.
+                </div>
+              )}
+              <Button type="submit" disabled={passwordChanging} className="w-full">
+                {passwordChanging ? "변경 중..." : "비밀번호 변경"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 
