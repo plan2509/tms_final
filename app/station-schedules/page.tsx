@@ -87,25 +87,52 @@ export default function StationSchedulesPage() {
         stationsData.forEach(station => {
           const existingSchedule = schedulesData?.find(s => s.station_id === station.id)
           
-          // 사용 승인일 카드 (캐노피 설치된 경우에만)
-          if (station.canopy_installed) {
+          // 기존 일정이 있는 경우, 두 날짜를 모두 입력해야 완료로 간주
+          if (existingSchedule) {
+            const hasUseApproval = existingSchedule.use_approval_enabled && existingSchedule.use_approval_date
+            const hasSafetyInspection = existingSchedule.safety_inspection_date
+            
+            // 사용 승인일 카드 (캐노피 설치된 경우에만)
+            if (station.canopy_installed) {
+              cards.push({
+                id: `${station.id}-use_approval`,
+                station,
+                type: 'use_approval',
+                date: existingSchedule.use_approval_date,
+                completed: hasUseApproval && hasSafetyInspection // 두 날짜 모두 입력된 경우에만 완료
+              })
+            }
+
+            // 안전 점검일 카드 (모든 충전소)
             cards.push({
-              id: `${station.id}-use_approval`,
+              id: `${station.id}-safety_inspection`,
               station,
-              type: 'use_approval',
-              date: existingSchedule?.use_approval_date || null,
-              completed: !!(existingSchedule?.use_approval_enabled && existingSchedule?.use_approval_date)
+              type: 'safety_inspection',
+              date: existingSchedule.safety_inspection_date,
+              completed: hasUseApproval && hasSafetyInspection // 두 날짜 모두 입력된 경우에만 완료
+            })
+          } else {
+            // 기존 일정이 없는 경우, 각각 개별적으로 완료 여부 판단
+            // 사용 승인일 카드 (캐노피 설치된 경우에만)
+            if (station.canopy_installed) {
+              cards.push({
+                id: `${station.id}-use_approval`,
+                station,
+                type: 'use_approval',
+                date: null,
+                completed: false
+              })
+            }
+
+            // 안전 점검일 카드 (모든 충전소)
+            cards.push({
+              id: `${station.id}-safety_inspection`,
+              station,
+              type: 'safety_inspection',
+              date: null,
+              completed: false
             })
           }
-
-          // 안전 점검일 카드 (모든 충전소)
-          cards.push({
-            id: `${station.id}-safety_inspection`,
-            station,
-            type: 'safety_inspection',
-            date: existingSchedule?.safety_inspection_date || null,
-            completed: !!existingSchedule?.safety_inspection_date
-          })
         })
 
         // 완료되지 않은 카드만 표시
