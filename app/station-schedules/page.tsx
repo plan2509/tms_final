@@ -96,28 +96,30 @@ export default function StationSchedulesPage() {
           const existingSchedule = schedulesData?.find(s => s.station_id === station.id)
           const stationCreatedAt = new Date(station.created_at)
           
-          // 신규 충전소: 최근 7일 이내에 생성되고 일정이 없는 경우
-          const isNewStation = stationCreatedAt > sevenDaysAgo && !existingSchedule
+          // 신규 충전소: 최근 7일 이내에 생성된 경우
+          const isNewStation = stationCreatedAt > sevenDaysAgo
           
           if (isNewStation) {
             // 사용 승인일 카드 (캐노피 설치된 경우에만)
             if (station.canopy_installed) {
+              const hasUseApproval = existingSchedule?.use_approval_enabled && existingSchedule?.use_approval_date
               cards.push({
                 id: `${station.id}-use_approval`,
                 station,
                 type: 'use_approval',
-                date: null,
-                completed: false
+                date: existingSchedule?.use_approval_date || null,
+                completed: hasUseApproval // 사용 승인일이 입력된 경우에만 완료
               })
             }
 
             // 안전 점검일 카드 (모든 충전소)
+            const hasSafetyInspection = !!existingSchedule?.safety_inspection_date
             cards.push({
               id: `${station.id}-safety_inspection`,
               station,
               type: 'safety_inspection',
-              date: null,
-              completed: false
+              date: existingSchedule?.safety_inspection_date || null,
+              completed: hasSafetyInspection // 안전 점검일이 입력된 경우에만 완료
             })
           }
         })
