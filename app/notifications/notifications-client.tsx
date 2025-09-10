@@ -45,7 +45,7 @@ interface Notification {
     channel_name: string
   }
   notification_schedules?: {
-    schedule_name: string
+    name: string
     days_before: number
   }
 }
@@ -59,7 +59,7 @@ interface TeamsChannel {
 
 interface Schedule {
   id: string
-  schedule_name: string
+  name: string
   days_before: number
   notification_time: string
   is_active: boolean
@@ -143,7 +143,7 @@ export function NotificationsClient() {
               channel_name
             ),
             notification_schedules (
-              schedule_name,
+              name,
               days_before
             )
           `)
@@ -167,7 +167,7 @@ export function NotificationsClient() {
           .from("notification_schedules")
           .select("*")
           .eq("is_active", true)
-          .order("schedule_name")
+          .order("name")
 
         if (schedulesData) {
           setSchedules(schedulesData)
@@ -321,7 +321,7 @@ export function NotificationsClient() {
                 )}
                 {notification.notification_schedules && (
                   <Badge variant="outline" className="text-xs">
-                    {notification.notification_schedules.schedule_name}
+                    {notification.notification_schedules.name}
                   </Badge>
                 )}
                 {variant === "tax" && <Badge className="bg-yellow-100 text-yellow-800 text-xs">세금 리마인더</Badge>}
@@ -805,7 +805,7 @@ export function NotificationsClient() {
             channel_name
           ),
           notification_schedules (
-            schedule_name,
+            name,
             days_before
           )
         `)
@@ -1286,7 +1286,7 @@ export function NotificationsClient() {
                       const { data, error } = await supabase
                         .from("notification_schedules")
                         .insert([{ 
-                          schedule_name: name, 
+                          name: name, 
                           days_before: days, 
                           notification_time: time, 
                           notification_type: "tax",
@@ -1333,7 +1333,7 @@ export function NotificationsClient() {
                       const { data, error } = await supabase
                         .from("notification_schedules")
                         .insert([{ 
-                          schedule_name: name, 
+                          name: name, 
                           days_before: days, 
                           notification_time: time, 
                           notification_type: "station_schedule",
@@ -1384,14 +1384,14 @@ export function NotificationsClient() {
               <Card key={schedule.id}>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center justify-between gap-2">
-                    <span>{schedule.schedule_name}</span>
+                    <span>{schedule.name}</span>
                     {isAdmin && (
                       <div className="flex gap-2">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={async () => {
-                            const name = prompt("스케줄 이름", schedule.schedule_name) || schedule.schedule_name
+                            const name = prompt("스케줄 이름", schedule.name) || schedule.name
                             const promptText = schedule.notification_type === 'tax' 
                               ? "세금 납부일 기준 며칠 전 알림(정수)"
                               : "충전소 생성 후 며칠이 지났을 때 미입력 알림을 보낼지 설정하세요 (정수)\n\n예시:\n• 7: 충전소 생성 후 7일 경과 시 미입력 알림\n• 15: 충전소 생성 후 15일 경과 시 미입력 알림\n• 30: 충전소 생성 후 30일 경과 시 미입력 알림\n\n미입력 대상:\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시"
@@ -1414,7 +1414,7 @@ export function NotificationsClient() {
                             try {
                               const { error } = await supabase
                                 .from("notification_schedules")
-                                .update({ schedule_name: name, days_before: days, notification_time: time, teams_channel_id: teamsChannelId })
+                                .update({ name: name, days_before: days, notification_time: time, teams_channel_id: teamsChannelId })
                                 .eq("id", schedule.id)
                               if (error) throw error
                               // refresh
@@ -1422,7 +1422,7 @@ export function NotificationsClient() {
                                 .from("notification_schedules")
                                 .select("*")
                                 .eq("is_active", true)
-                                .order("schedule_name")
+                                .order("name")
                               if (data) setSchedules(data as any)
                               toast({ title: "수정 완료", description: "스케줄이 수정되었습니다." })
                             } catch (e) {
