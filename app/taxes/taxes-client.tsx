@@ -832,11 +832,11 @@ export function TaxesClient() {
                 nDate.setDate(nDate.getDate() - scheduleDays) // days_before는 납부기한 이전 날짜
                 const nDateISO = isNaN(nDate.getTime()) ? dueDateISO : nDate.toISOString().split('T')[0]
                 
-                // 미래 날짜만 생성 (과거/오늘은 제외)
+                // 미래 날짜만 생성 (과거/오늘은 제외) - 디버깅용으로 임시 비활성화
                 const today = new Date().toISOString().split('T')[0]
                 if (nDateISO <= today) {
-                  console.log(`과거/오늘 알림 제외: ${nDateISO} (스케줄: ${scheduleDays}일)`)
-                  continue
+                  console.log(`과거/오늘 알림도 생성 (디버깅): ${nDateISO} (스케줄: ${scheduleDays}일)`)
+                  // continue // 임시로 주석 처리하여 과거 날짜도 생성
                 }
 
                 const { error: nErr } = await supabase.from('notifications').insert({

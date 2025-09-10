@@ -145,7 +145,7 @@ export function StationsClient() {
             .from("station_schedules")
             .select("*")
             .eq("station_id", stationId)
-            .single()
+            .maybeSingle()
           
           setSchedule(data)
         } catch (error) {
@@ -271,13 +271,17 @@ export function StationsClient() {
         }
 
         // 2. 충전소 일정 미입력 알림 생성 (station_schedule 타입 스케줄 기반)
+        console.log('충전소 일정 알림 스케줄 조회 중...')
         const { data: stationSchedules, error: scheduleQueryErr } = await supabase
           .from('notification_schedules')
           .select('*')
           .eq('notification_type', 'station_schedule')
           .eq('is_active', true)
 
+        console.log('충전소 스케줄 조회 결과:', { stationSchedules, scheduleQueryErr })
+
         if (!scheduleQueryErr && stationSchedules && stationSchedules.length > 0) {
+          console.log(`활성화된 충전소 스케줄 ${stationSchedules.length}개 발견`)
           for (const schedule of stationSchedules) {
             try {
               const scheduleDays = Number(schedule.days_before || 0)
@@ -287,7 +291,11 @@ export function StationsClient() {
 
               // 미래 날짜만 생성
               const today = new Date().toISOString().split('T')[0]
-              if (nDateISO <= today) continue
+              console.log(`알림 날짜 확인: ${nDateISO}, 오늘: ${today}, ${scheduleDays}일 경과`)
+              if (nDateISO <= today) {
+                console.log(`과거/오늘 알림 제외: ${nDateISO} (스케줄: ${scheduleDays}일)`)
+                continue
+              }
 
               const missingItems = []
               if (data.canopy_installed) missingItems.push('사용 승인일')
@@ -425,7 +433,7 @@ export function StationsClient() {
         .from("station_schedules")
         .select("id")
         .eq("station_id", editingStation.id)
-        .single()
+        .maybeSingle()
 
       if (existingSchedule) {
         // 기존 일정 업데이트
@@ -634,7 +642,7 @@ export function StationsClient() {
               .from("station_schedules")
               .select("*")
               .eq("station_id", station.id)
-              .single()
+              .maybeSingle()
             
             if (data) {
               setScheduleData({

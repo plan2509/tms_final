@@ -170,9 +170,12 @@ export default function StationSchedulesPage() {
             nDate.setDate(nDate.getDate() - scheduleDays) // 납부기한 이전 날짜
             const nDateISO = isNaN(nDate.getTime()) ? dueDateISO : nDate.toISOString().split('T')[0]
             
-            // 미래 날짜만 생성
+            // 미래 날짜만 생성 - 디버깅용으로 임시 비활성화
             const today = new Date().toISOString().split('T')[0]
-            if (nDateISO <= today) continue
+            if (nDateISO <= today) {
+              console.log(`과거/오늘 알림도 생성 (디버깅): ${nDateISO}`)
+              // continue // 임시로 주석 처리
+            }
 
             const { error: nErr } = await supabase.from('notifications').insert({
               notification_type: 'tax',
@@ -246,7 +249,7 @@ export default function StationSchedulesPage() {
         .from("station_schedules")
         .select("*")
         .eq("station_id", station.id)
-        .single()
+        .maybeSingle()
 
       let scheduleData: any = {
         station_id: station.id,
