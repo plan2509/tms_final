@@ -803,28 +803,78 @@ export function TaxesClient() {
       console.log("=== 세금 등록 성공 ===")
       console.log("세금 데이터:", data)
       
-      // 세금 알림 생성 (즉시 생성)
+      // 세금 알림 생성 (스케줄 우선 → 폴백)
       try {
         const stationName = data.charging_stations?.station_name || '충전소'
         const taxAmount = data.tax_amount?.toLocaleString() || '0'
-        const dueDate = new Date(data.due_date).toLocaleDateString('ko-KR')
-        
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: userId,
-            title: '세금 등록 완료',
-            message: `${stationName}의 세금이 등록되었습니다. (금액: ${taxAmount}원, 납부기한: ${dueDate})`,
-            type: 'tax'
-          })
-        
-        if (notificationError) {
-          console.error('알림 생성 실패:', notificationError)
-        } else {
-          console.log('세금 등록 알림 생성 완료')
+        const dueDateHuman = new Date(data.due_date).toLocaleDateString('ko-KR')
+        const dueDateISO = new Date(data.due_date).toISOString().split('T')[0]
+
+        let createdViaSchedules = false
+
+        // 스케줄 기반 알림 생성 시도
+        try {
+          const { data: schedules, error: scheduleErr } = await supabase
+            .from('notification_schedules')
+            .select('*')
+            .eq('notification_type', 'tax')
+            .eq('is_active', true)
+
+          if (!scheduleErr && Array.isArray(schedules) && schedules.length > 0) {
+            for (const schedule of schedules) {
+              try {
+                const scheduleDays = Number(schedule.days_before || 0)
+                const nDate = new Date(data.due_date)
+                nDate.setDate(nDate.getDate() + scheduleDays)
+                const nDateISO = isNaN(nDate.getTime()) ? dueDateISO : nDate.toISOString().split('T')[0]
+
+                const { error: nErr } = await supabase.from('notifications').insert({
+                  notification_type: 'tax',
+                  schedule_id: schedule.id,
+                  tax_id: data.id,
+                  station_id: data.station_id,
+                  notification_date: nDateISO,
+                  notification_time: schedule.notification_time || '10:00',
+                  title: `세금 ${Math.abs(scheduleDays)}일 ${scheduleDays < 0 ? '전' : '후'} 알림`,
+                  message: `${stationName}의 세금 납부 관련 알림입니다. (기한: ${dueDateHuman})`,
+                  teams_channel_id: schedule.teams_channel_id,
+                  created_by: userId,
+                  is_sent: false,
+                })
+                if (!nErr) createdViaSchedules = true
+              } catch {}
+            }
+          }
+        } catch {}
+
+        // 스케줄로 하나도 생성 못 했으면 확장 스키마 단건 → 실패 시 최소 스키마 폴백
+        if (!createdViaSchedules) {
+          const { error: extendedErr } = await supabase
+            .from('notifications')
+            .insert({
+              notification_type: 'tax',
+              tax_id: data.id,
+              station_id: data.station_id,
+              notification_date: dueDateISO,
+              notification_time: '10:00',
+              is_sent: false,
+              created_by: userId,
+              title: '세금 등록 완료',
+              message: `${stationName}의 세금이 등록되었습니다. (금액: ${taxAmount}원, 납부기한: ${dueDateHuman})`,
+            })
+
+          if (extendedErr) {
+            const { error: minimalErr } = await supabase.from('notifications').insert({
+              user_id: userId,
+              title: '세금 등록 완료',
+              message: `${stationName}의 세금이 등록되었습니다. (금액: ${taxAmount}원, 납부기한: ${dueDateHuman})`,
+              type: 'tax',
+            })
+            if (minimalErr) console.error('알림 생성 실패(폴백도 실패):', minimalErr)
+          }
         }
       } catch (error) {
-        console.error("세금 알림 생성 오류:", error)
+        console.error('세금 알림 생성 오류:', error)
       }
       
       logAudit({
