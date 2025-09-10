@@ -827,6 +827,13 @@ export function TaxesClient() {
                 const nDate = new Date(data.due_date)
                 nDate.setDate(nDate.getDate() + scheduleDays)
                 const nDateISO = isNaN(nDate.getTime()) ? dueDateISO : nDate.toISOString().split('T')[0]
+                
+                // 미래 날짜만 생성 (과거/오늘은 제외)
+                const today = new Date().toISOString().split('T')[0]
+                if (nDateISO <= today) {
+                  console.log(`과거/오늘 알림 제외: ${nDateISO} (스케줄: ${scheduleDays}일)`)
+                  continue
+                }
 
                 const { error: nErr } = await supabase.from('notifications').insert({
                   notification_type: 'tax',

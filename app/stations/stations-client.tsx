@@ -247,11 +247,80 @@ export function StationsClient() {
     } else {
       setStations([data, ...stations])
       
-      // 충전소 생성 시 알림 생성 비활성화 (테이블 구조 문제로 임시 비활성화)
+      // 충전소 생성 시 사업 일정 카드 자동 생성
       console.log("=== 충전소 생성 성공 ===")
       console.log("충전소 데이터:", data)
       
-      // 알림 생성 코드 비활성화
+      try {
+        // 사업 일정 카드 생성
+        const scheduleData: any = {
+          station_id: data.id,
+          use_approval_enabled: data.canopy_installed || false,
+          use_approval_date: null,
+          safety_inspection_date: null,
+        }
+
+        const { error: scheduleErr } = await supabase
+          .from('station_schedules')
+          .insert([scheduleData])
+
+        if (scheduleErr) {
+          console.warn('사업 일정 카드 생성 실패:', scheduleErr.message)
+        } else {
+          console.log('사업 일정 카드 생성 완료')
+        }
+
+        // 충전소 일정 알림 생성 (station_schedule 타입 스케줄 기반)
+        const { data: stationSchedules, error: scheduleQueryErr } = await supabase
+          .from('notification_schedules')
+          .select('*')
+          .eq('notification_type', 'station_schedule')
+          .eq('is_active', true)
+
+        if (!scheduleQueryErr && stationSchedules && stationSchedules.length > 0) {
+          for (const schedule of stationSchedules) {
+            try {
+              const scheduleDays = Number(schedule.days_before || 14)
+              const nDate = new Date()
+              nDate.setDate(nDate.getDate() + scheduleDays)
+              const nDateISO = nDate.toISOString().split('T')[0]
+
+              // 미래 날짜만 생성
+              const today = new Date().toISOString().split('T')[0]
+              if (nDateISO <= today) continue
+
+              const missingItems = []
+              if (data.canopy_installed) missingItems.push('사용 승인일')
+              missingItems.push('안전 점검일')
+
+              const message = `충전소 "${data.station_name}"의 일정 입력이 필요합니다.\n미입력 항목: ${missingItems.join(', ')}`
+
+              const { error: notifErr } = await supabase.from('notifications').insert({
+                notification_type: 'station_schedule',
+                schedule_id: schedule.id,
+                station_id: data.id,
+                notification_date: nDateISO,
+                notification_time: schedule.notification_time || '10:00',
+                title: `충전소 일정 입력 알림 (${scheduleDays}일 경과)`,
+                message: message,
+                teams_channel_id: schedule.teams_channel_id,
+                created_by: userId,
+                is_sent: false,
+              })
+
+              if (notifErr) {
+                console.warn('충전소 일정 알림 생성 실패:', notifErr.message)
+              } else {
+                console.log('충전소 일정 알림 생성 완료')
+              }
+            } catch (e) {
+              console.warn('충전소 알림 생성 중 오류:', e)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('충전소 생성 후처리 오류:', error)
+      }
       
       // audit log: create station
       logAudit({
@@ -482,20 +551,33 @@ export function StationsClient() {
       return
     }
 
-    // 충전소 삭제 전 관련 알림 삭제
-    const stationToDelete = stations.find(s => s.id === stationId)
-    if (stationToDelete) {
+    // 충전소 삭제 전 관련 데이터 정리
+    try {
+      // 1. 사업 일정 카드 삭제
+      const { error: scheduleDeleteError } = await supabase
+        .from("station_schedules")
+        .delete()
+        .eq("station_id", stationId)
+      
+      if (scheduleDeleteError) {
+        console.warn("사업 일정 카드 삭제 실패:", scheduleDeleteError.message)
+      } else {
+        console.log("사업 일정 카드 삭제 완료")
+      }
+
+      // 2. 충전소 관련 알림 전체 삭제 (station_id 기준)
       const { error: notificationError } = await supabase
         .from("notifications")
         .delete()
-        .ilike("message", `%${stationToDelete.station_name}%`)
-        .eq("notification_type", "auto")
+        .eq("station_id", stationId)
       
       if (notificationError) {
-        console.error("충전소 관련 알림 삭제 오류:", notificationError)
+        console.warn("충전소 관련 알림 삭제 실패:", notificationError.message)
       } else {
-        console.log(`충전소 관련 알림 삭제됨: ${stationToDelete.station_name}`)
+        console.log("충전소 관련 알림 삭제 완료")
       }
+    } catch (error) {
+      console.error("충전소 관련 데이터 삭제 중 오류:", error)
     }
 
     const { error } = await supabase.from("charging_stations").delete().eq("id", stationId)
