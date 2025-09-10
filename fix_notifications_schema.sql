@@ -13,26 +13,54 @@ ADD COLUMN IF NOT EXISTS is_sent BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS error_message TEXT,
 ADD COLUMN IF NOT EXISTS created_by UUID;
 
--- 외래키 제약조건 추가
-ALTER TABLE public.notifications 
-ADD CONSTRAINT IF NOT EXISTS fk_notifications_schedule 
-  FOREIGN KEY (schedule_id) REFERENCES public.notification_schedules(id) ON DELETE SET NULL;
+-- 외래키 제약조건 추가 (IF NOT EXISTS 대신 DO 블록 사용)
+DO $$
+BEGIN
+  -- schedule_id 외래키
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                 WHERE constraint_name = 'fk_notifications_schedule' 
+                 AND table_name = 'notifications') THEN
+    ALTER TABLE public.notifications 
+    ADD CONSTRAINT fk_notifications_schedule 
+      FOREIGN KEY (schedule_id) REFERENCES public.notification_schedules(id) ON DELETE SET NULL;
+  END IF;
 
-ALTER TABLE public.notifications 
-ADD CONSTRAINT IF NOT EXISTS fk_notifications_tax 
-  FOREIGN KEY (tax_id) REFERENCES public.taxes(id) ON DELETE CASCADE;
+  -- tax_id 외래키
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                 WHERE constraint_name = 'fk_notifications_tax' 
+                 AND table_name = 'notifications') THEN
+    ALTER TABLE public.notifications 
+    ADD CONSTRAINT fk_notifications_tax 
+      FOREIGN KEY (tax_id) REFERENCES public.taxes(id) ON DELETE CASCADE;
+  END IF;
 
-ALTER TABLE public.notifications 
-ADD CONSTRAINT IF NOT EXISTS fk_notifications_station 
-  FOREIGN KEY (station_id) REFERENCES public.charging_stations(id) ON DELETE CASCADE;
+  -- station_id 외래키
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                 WHERE constraint_name = 'fk_notifications_station' 
+                 AND table_name = 'notifications') THEN
+    ALTER TABLE public.notifications 
+    ADD CONSTRAINT fk_notifications_station 
+      FOREIGN KEY (station_id) REFERENCES public.charging_stations(id) ON DELETE CASCADE;
+  END IF;
 
-ALTER TABLE public.notifications 
-ADD CONSTRAINT IF NOT EXISTS fk_notifications_teams_channel 
-  FOREIGN KEY (teams_channel_id) REFERENCES public.teams_channels(id) ON DELETE SET NULL;
+  -- teams_channel_id 외래키
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                 WHERE constraint_name = 'fk_notifications_teams_channel' 
+                 AND table_name = 'notifications') THEN
+    ALTER TABLE public.notifications 
+    ADD CONSTRAINT fk_notifications_teams_channel 
+      FOREIGN KEY (teams_channel_id) REFERENCES public.teams_channels(id) ON DELETE SET NULL;
+  END IF;
 
-ALTER TABLE public.notifications 
-ADD CONSTRAINT IF NOT EXISTS fk_notifications_created_by 
-  FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+  -- created_by 외래키
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                 WHERE constraint_name = 'fk_notifications_created_by' 
+                 AND table_name = 'notifications') THEN
+    ALTER TABLE public.notifications 
+    ADD CONSTRAINT fk_notifications_created_by 
+      FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- 인덱스 추가
 CREATE INDEX IF NOT EXISTS idx_notifications_type ON public.notifications(notification_type);
