@@ -1,25 +1,37 @@
--- station_schedules 테이블 RLS 정책 수정
--- 406 오류 해결을 위한 권한 설정
+-- station_schedules RLS 정책 수정
 
 -- 기존 정책 삭제
-DROP POLICY IF EXISTS "Users can view station schedules" ON public.station_schedules;
-DROP POLICY IF EXISTS "Users can insert station schedules" ON public.station_schedules;
-DROP POLICY IF EXISTS "Users can update station schedules" ON public.station_schedules;
-DROP POLICY IF EXISTS "Users can delete station schedules" ON public.station_schedules;
+DROP POLICY IF EXISTS "station_sched_select_all" ON public.station_schedules;
+DROP POLICY IF EXISTS "station_sched_upsert_auth" ON public.station_schedules;
+DROP POLICY IF EXISTS "station_sched_service_all" ON public.station_schedules;
 
 -- 새로운 정책 생성
-CREATE POLICY "Enable read access for all users" ON public.station_schedules
-    FOR SELECT USING (true);
+CREATE POLICY "station_schedules_select_all" ON public.station_schedules
+    FOR SELECT
+    TO authenticated
+    USING (true);
 
-CREATE POLICY "Enable insert for authenticated users" ON public.station_schedules
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "station_schedules_insert_auth" ON public.station_schedules
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (true);
 
-CREATE POLICY "Enable update for authenticated users" ON public.station_schedules
-    FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "station_schedules_update_auth" ON public.station_schedules
+    FOR UPDATE
+    TO authenticated
+    USING (true)
+    WITH CHECK (true);
 
-CREATE POLICY "Enable delete for authenticated users" ON public.station_schedules
-    FOR DELETE USING (auth.role() = 'authenticated');
+CREATE POLICY "station_schedules_delete_auth" ON public.station_schedules
+    FOR DELETE
+    TO authenticated
+    USING (true);
 
--- RLS 활성화 확인
-ALTER TABLE public.station_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "station_schedules_service_role_all" ON public.station_schedules
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
 
+-- 통계 출력
+SELECT 'station_schedules RLS 정책 수정 완료' as status;
