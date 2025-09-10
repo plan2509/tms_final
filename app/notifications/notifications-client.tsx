@@ -124,26 +124,11 @@ export function NotificationsClient() {
           setActorName(profile.name || profile.email || "")
         }
 
-        const { data: notificationsData } = await supabase
+        const { data: notificationsData, error: notifErr } = await supabase
           .from("notifications")
-          .select(`
-            *,
-            taxes (
-              id,
-              tax_type,
-              tax_amount,
-              due_date,
-              charging_stations (
-                station_name,
-                location
-              )
-            ),
-            teams_channels (
-              id,
-              channel_name
-            )
-          `)
+          .select("*")
           .order("notification_date", { ascending: false })
+        if (notifErr) console.warn("[v0] Notifications fetch error:", notifErr)
 
         if (notificationsData) {
           setNotifications(notificationsData)
@@ -782,26 +767,11 @@ export function NotificationsClient() {
         setUserId(user.id)
       }
 
-      const { data: notificationsData } = await supabase
+      const { data: notificationsData, error: notifErr } = await supabase
         .from("notifications")
-        .select(`
-          *,
-          taxes (
-            id,
-            tax_type,
-            tax_amount,
-            due_date,
-            charging_stations (
-              station_name,
-              location
-            )
-          ),
-          teams_channels (
-            id,
-            channel_name
-          )
-        `)
+        .select("*")
         .order("notification_date", { ascending: false })
+      if (notifErr) console.warn("[v0] Notifications fetch error:", notifErr)
 
       if (notificationsData) {
         setNotifications(notificationsData)
