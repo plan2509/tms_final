@@ -308,10 +308,13 @@ export default function StationSchedulesPage() {
             .from("notifications")
             .insert([{
               user_id: user.id,
+              notification_type: "station_schedule",
+              notification_date: new Date().toISOString().split('T')[0],
+              notification_time: "10:00",
               title: "사업 일정 등록 완료",
               message: `${station.station_name} ${typeName}이 등록되었습니다.`,
-              type: "success",
-              read: false
+              station_id: station.id,
+              is_sent: false
             }])
           
           if (notificationError) {

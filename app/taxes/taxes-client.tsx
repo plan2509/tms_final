@@ -854,9 +854,29 @@ export function TaxesClient() {
           }
         } catch {}
 
-        // 스케줄이 없으면 알림 생성 안 함 (스케줄 기반 알림만 사용)
+        // 스케줄이 없으면 기본 알림 생성
         if (!createdViaSchedules) {
-          console.log('알림 스케줄이 없어서 알림을 생성하지 않습니다.')
+          console.log('알림 스케줄이 없어서 기본 알림을 생성합니다.')
+          try {
+            const { error: basicNotifErr } = await supabase.from('notifications').insert({
+              notification_type: 'tax',
+              tax_id: data.id,
+              station_id: data.station_id,
+              notification_date: dueDateISO,
+              notification_time: '10:00',
+              title: '세금 등록 완료',
+              message: `${stationName}의 세금이 등록되었습니다. (금액: ${taxAmount}원, 납부기한: ${dueDateHuman})`,
+              created_by: userId,
+              is_sent: false,
+            })
+            if (basicNotifErr) {
+              console.warn('기본 알림 생성 실패:', basicNotifErr.message)
+            } else {
+              console.log('기본 알림 생성 완료')
+            }
+          } catch (e) {
+            console.warn('기본 알림 생성 중 오류:', e)
+          }
         }
       } catch (error) {
         console.error('세금 알림 생성 오류:', error)
