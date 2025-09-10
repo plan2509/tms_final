@@ -143,7 +143,7 @@ export function NotificationsClient() {
               channel_name
             )
           `)
-          .order("created_at", { ascending: false })
+          .order("notification_date", { ascending: false })
 
         if (notificationsData) {
           setNotifications(notificationsData)
@@ -801,7 +801,7 @@ export function NotificationsClient() {
             channel_name
           )
         `)
-        .order("created_at", { ascending: false })
+        .order("notification_date", { ascending: false })
 
       if (notificationsData) {
         setNotifications(notificationsData)
