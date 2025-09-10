@@ -796,58 +796,9 @@ export function TaxesClient() {
       console.log("[v0] Tax registration successful")
       setTaxes([data, ...taxes])
       
-      // 팝업을 먼저 닫기
-      setIsCreateDialogOpen(false)
-      
-      // 세금 등록 시 알림 생성
+      // 세금 등록 시 알림 생성하지 않음 (dispatch-notifications API에서 자동 생성)
       console.log("=== 세금 등록 성공 ===")
       console.log("세금 데이터:", data)
-      
-      // 세금 알림 생성 (즉시 생성)
-      try {
-        // 알림 스케줄 조회
-        const { data: schedules, error: scheduleError } = await supabase
-          .from('notification_schedules')
-          .select('*')
-          .eq('notification_type', 'tax')
-          .eq('is_active', true)
-        
-        if (scheduleError) {
-          console.error('알림 스케줄 조회 실패:', scheduleError)
-        } else if (schedules && schedules.length > 0) {
-          // 각 스케줄에 대해 알림 생성
-          for (const schedule of schedules) {
-            const notificationDate = new Date(data.due_date)
-            notificationDate.setDate(notificationDate.getDate() + schedule.days_before)
-            
-            const message = `세금 납부일이 ${Math.abs(schedule.days_before)}일 ${schedule.days_before < 0 ? '남았습니다' : '경과했습니다'} - ${data.charging_stations?.station_name || '충전소'}`
-            
-            const { error: notificationError } = await supabase
-              .from('notifications')
-              .insert({
-                notification_type: 'tax',
-                schedule_id: schedule.id,
-                tax_id: data.id,
-                station_id: data.station_id,
-                notification_date: notificationDate.toISOString().split('T')[0],
-                notification_time: schedule.notification_time || '10:00',
-                title: `세금 ${Math.abs(schedule.days_before)}일 ${schedule.days_before < 0 ? '전' : '후'} 알림`,
-                message: message,
-                teams_channel_id: schedule.teams_channel_id,
-                created_by: userId,
-                is_sent: false
-              })
-            
-            if (notificationError) {
-              console.error('알림 생성 실패:', notificationError)
-            } else {
-              console.log(`알림 생성 완료: ${schedule.name}`)
-            }
-          }
-        }
-      } catch (error) {
-        console.error("세금 알림 생성 오류:", error)
-      }
       
       logAudit({
         menu: "taxes",
@@ -858,7 +809,7 @@ export function TaxesClient() {
         targetTable: "taxes",
         targetId: data.id,
       })
-      
+      setIsCreateDialogOpen(false)
       toast({
         title: "성공",
         description: "세금이 성공적으로 등록되었습니다.",

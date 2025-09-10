@@ -247,61 +247,11 @@ export function StationsClient() {
     } else {
       setStations([data, ...stations])
       
-      // 신규 충전소에 대한 사업 일정 알림 생성
-      console.log("=== 충전소 생성 성공, 알림 생성 시작 ===")
+      // 충전소 생성 시 알림 생성 비활성화 (테이블 구조 문제로 임시 비활성화)
+      console.log("=== 충전소 생성 성공 ===")
       console.log("충전소 데이터:", data)
-      console.log("사용자 ID:", userId)
-      console.log("캐노피 설치 여부:", data.canopy_installed)
       
-      const notifications = []
-      
-      // 사용 승인일 알림 (캐노피 설치된 경우에만)
-      if (data.canopy_installed) {
-        const useApprovalNotification = {
-          tax_id: null,
-          notification_type: "manual",
-          schedule_id: null,
-          notification_date: new Date().toISOString().split('T')[0],
-          notification_time: "10:00",
-          message: `${data.station_name}의 사용 승인일 입력이 필요합니다.`,
-          is_sent: false,
-          sent_at: null,
-          teams_channel_id: null
-        }
-        notifications.push(useApprovalNotification)
-        console.log("사용 승인일 알림 추가:", useApprovalNotification)
-      }
-      
-      // 안전 점검일 알림 (모든 충전소)
-      const safetyInspectionNotification = {
-        tax_id: null,
-        notification_type: "manual",
-        schedule_id: null,
-        notification_date: new Date().toISOString().split('T')[0],
-        notification_time: "10:00",
-        message: `${data.station_name}의 안전 점검일 입력이 필요합니다.`,
-        is_sent: false,
-        sent_at: null,
-        teams_channel_id: null
-      }
-      notifications.push(safetyInspectionNotification)
-      console.log("안전 점검일 알림 추가:", safetyInspectionNotification)
-      
-      console.log("생성할 알림 목록:", notifications)
-      
-      // 알림 생성
-      const { data: insertedNotifications, error: notificationError } = await supabase
-        .from("notifications")
-        .insert(notifications)
-        .select()
-      
-      if (notificationError) {
-        console.error("사업 일정 알림 생성 오류:", notificationError)
-        console.error("오류 상세:", JSON.stringify(notificationError, null, 2))
-      } else {
-        console.log(`사업 일정 알림 생성 성공: ${data.station_name} (${notifications.length}개)`)
-        console.log("삽입된 알림:", insertedNotifications)
-      }
+      // 알림 생성 코드 비활성화
       
       // audit log: create station
       logAudit({
@@ -530,6 +480,22 @@ export function StationsClient() {
       })
       setIsLoading(false)
       return
+    }
+
+    // 충전소 삭제 전 관련 알림 삭제
+    const stationToDelete = stations.find(s => s.id === stationId)
+    if (stationToDelete) {
+      const { error: notificationError } = await supabase
+        .from("notifications")
+        .delete()
+        .ilike("message", `%${stationToDelete.station_name}%`)
+        .eq("notification_type", "auto")
+      
+      if (notificationError) {
+        console.error("충전소 관련 알림 삭제 오류:", notificationError)
+      } else {
+        console.log(`충전소 관련 알림 삭제됨: ${stationToDelete.station_name}`)
+      }
     }
 
     const { error } = await supabase.from("charging_stations").delete().eq("id", stationId)

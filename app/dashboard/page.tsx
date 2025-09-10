@@ -75,7 +75,7 @@ export default function DashboardPage() {
           // Only notification counts
           supabase
             .from("notifications")
-            .select("is_sent, sent_at"),
+            .select("id, created_at"),
         ])
 
         const stations = stationsResult.data || []
@@ -125,8 +125,8 @@ export default function DashboardPage() {
         ).length
 
         // Process notifications
-        const pendingNotifications = notifications.filter((n) => !n.is_sent).length
-        const sentToday = notifications.filter((n) => n.is_sent && n.sent_at >= today).length
+        const pendingNotifications = notifications.length
+        const sentToday = notifications.filter((n) => n.created_at >= today).length
 
         const updatedStats = [
           {

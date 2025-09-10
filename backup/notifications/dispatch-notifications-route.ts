@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
         const { data: newNotification, error: notificationError } = await supabase
           .from("notifications")
           .insert([{
-            notification_type: "tax",
+            notification_type: "auto",
             schedule_id: schedule.id,
             notification_date: todayKst,
             notification_time: "10:00",
@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
       const { data: newNotification, error: notificationError } = await supabase
         .from("notifications")
         .insert([{
-          notification_type: "station_schedule",
+          notification_type: "auto",
           schedule_id: sched.id,
           notification_date: todayKst,
           notification_time: "10:00",

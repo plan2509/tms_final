@@ -289,9 +289,8 @@ export default function StationSchedulesPage() {
         const { error: deleteError } = await supabase
           .from("notifications")
           .delete()
-          .eq("user_id", user.id)
-          .eq("title", "사업 일정 입력 필요")
           .ilike("message", `%${station.station_name}%`)
+          .eq("notification_type", "auto")
         
         if (deleteError) {
           console.error("기존 미입력 알림 삭제 오류:", deleteError)
@@ -302,21 +301,24 @@ export default function StationSchedulesPage() {
 
       // 알림 생성 (사업 일정 등록 완료 알림)
       if (date) {
-        const typeName = type === 'use_approval' ? '사용 승인일' : '안전 점검일'
-        const { error: notificationError } = await supabase
-          .from("notifications")
-          .insert([{
-            user_id: user.id,
-            title: "사업 일정 등록 완료",
-            message: `${station.station_name} ${typeName}이 등록되었습니다.`,
-            type: "success",
-            read: false
-          }])
-        
-        if (notificationError) {
-          console.error("Notification creation error:", notificationError)
-        } else {
-          console.log(`사업 일정 등록 완료 알림 생성됨: ${station.station_name} ${typeName}`)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const typeName = type === 'use_approval' ? '사용 승인일' : '안전 점검일'
+          const { error: notificationError } = await supabase
+            .from("notifications")
+            .insert([{
+              user_id: user.id,
+              title: "사업 일정 등록 완료",
+              message: `${station.station_name} ${typeName}이 등록되었습니다.`,
+              type: "success",
+              read: false
+            }])
+          
+          if (notificationError) {
+            console.error("Notification creation error:", notificationError)
+          } else {
+            console.log(`사업 일정 등록 완료 알림 생성됨: ${station.station_name} ${typeName}`)
+          }
         }
       }
 
