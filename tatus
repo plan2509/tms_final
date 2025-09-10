@@ -1,0 +1,5 @@
+[33me2bb795[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m fix: 세금 등록 시 알림 자동 생성 기능 추가
+[33m5d6d170[m Restore immediate notification creation on station creation
+[33m75ebfe1[m Fix notification schedule system for missing station schedules
+[33m9a9c5bb[m fix: notifications 테이블 스키마에 맞춰 알림 생성 로직 수정
+[33m01c4bbc[m debug: 충전소 생성 시 알림 생성 디버깅 로그 추가
