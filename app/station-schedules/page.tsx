@@ -143,6 +143,74 @@ export default function StationSchedulesPage() {
     }
   }
 
+  // 세금 알림 생성 함수 (taxes-client.tsx 로직과 동일)
+  const createTaxNotifications = async (taxData: any, stationName: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const dueDateHuman = new Date(taxData.due_date).toLocaleDateString('ko-KR')
+      const dueDateISO = new Date(taxData.due_date).toISOString().split('T')[0]
+      const taxAmount = taxData.tax_amount?.toLocaleString() || '0'
+
+      let createdViaSchedules = false
+
+      // 스케줄 기반 알림 생성 시도
+      const { data: schedules, error: scheduleErr } = await supabase
+        .from('notification_schedules')
+        .select('*')
+        .eq('notification_type', 'tax')
+        .eq('is_active', true)
+
+      if (!scheduleErr && Array.isArray(schedules) && schedules.length > 0) {
+        for (const schedule of schedules) {
+          try {
+            const scheduleDays = Number(schedule.days_before || 0)
+            const nDate = new Date(taxData.due_date)
+            nDate.setDate(nDate.getDate() - scheduleDays) // 납부기한 이전 날짜
+            const nDateISO = isNaN(nDate.getTime()) ? dueDateISO : nDate.toISOString().split('T')[0]
+            
+            // 미래 날짜만 생성
+            const today = new Date().toISOString().split('T')[0]
+            if (nDateISO <= today) continue
+
+            const { error: nErr } = await supabase.from('notifications').insert({
+              notification_type: 'tax',
+              schedule_id: schedule.id,
+              tax_id: taxData.id,
+              station_id: taxData.station_id,
+              notification_date: nDateISO,
+              notification_time: schedule.notification_time || '10:00',
+              title: `세금 ${scheduleDays}일 전 알림`,
+              message: `${stationName}의 세금 납부 관련 알림입니다. (기한: ${dueDateHuman})`,
+              teams_channel_id: schedule.teams_channel_id,
+              created_by: user.id,
+              is_sent: false,
+            })
+            if (!nErr) createdViaSchedules = true
+          } catch {}
+        }
+      }
+
+      // 스케줄이 없으면 기본 알림 생성
+      if (!createdViaSchedules) {
+        await supabase.from('notifications').insert({
+          notification_type: 'tax',
+          tax_id: taxData.id,
+          station_id: taxData.station_id,
+          notification_date: dueDateISO,
+          notification_time: '10:00',
+          title: '세금 등록 완료',
+          message: `${stationName}의 세금이 등록되었습니다. (금액: ${taxAmount}원, 납부기한: ${dueDateHuman})`,
+          created_by: user.id,
+          is_sent: false,
+        })
+      }
+    } catch (error) {
+      console.error('취득세 알림 생성 오류:', error)
+    }
+  }
+
   const handleDateChange = (cardId: string, date: string) => {
     setScheduleCards(prev => prev.map(card => {
       if (card.id === cardId) {
@@ -234,7 +302,7 @@ export default function StationSchedulesPage() {
           .single()
 
         if (!existingCanopyTax) {
-          const { error: canopyTaxError } = await supabase
+          const { data: newTaxData, error: canopyTaxError } = await supabase
             .from("taxes")
             .insert([{
               station_id: station.id,
@@ -244,11 +312,16 @@ export default function StationSchedulesPage() {
               status: "payment_scheduled",
               notes: "캐노피 취득세 (사용 승인일 기준)",
             }])
+            .select()
+            .single()
 
           if (canopyTaxError) {
             console.error("Canopy tax creation error:", canopyTaxError)
           } else {
             console.log(`캐노피 취득세 생성됨: ${station.station_name}`)
+            
+            // 취득세 생성 시 연쇄적으로 세금 알림 생성
+            await createTaxNotifications(newTaxData, station.station_name)
           }
         }
       } else if (type === 'safety_inspection' && date) {
@@ -265,7 +338,7 @@ export default function StationSchedulesPage() {
           .single()
 
         if (!existingChargerTax) {
-          const { error: chargerTaxError } = await supabase
+          const { data: newTaxData, error: chargerTaxError } = await supabase
             .from("taxes")
             .insert([{
               station_id: station.id,
@@ -275,11 +348,16 @@ export default function StationSchedulesPage() {
               status: "payment_scheduled",
               notes: "충전기 취득세 (안전 점검일 기준)",
             }])
+            .select()
+            .single()
 
           if (chargerTaxError) {
             console.error("Charger tax creation error:", chargerTaxError)
           } else {
             console.log(`충전기 취득세 생성됨: ${station.station_name}`)
+            
+            // 취득세 생성 시 연쇄적으로 세금 알림 생성
+            await createTaxNotifications(newTaxData, station.station_name)
           }
         }
       }
