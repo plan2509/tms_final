@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}))
     const notificationType = body.notification_type || req.nextUrl.searchParams.get("type")
 
-    // Load active schedules based on notification type
+너가 자자도ㅣㄴ 알리리    // Load active schedules based on notification type
     let taxSchedules = []
     let stationSchedules = []
     
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
       
       for (const sched of taxSchedules as any[]) {
         const targetDate = new Date(now)
-        targetDate.setDate(now.getDate() + sched.days_before)
+        targetDate.setDate(now.getDate() + sched.days_before) // days_before일 후의 납부기한을 찾음
         const y = targetDate.getFullYear()
         const m = String(targetDate.getMonth() + 1).padStart(2, "0")
         const d = String(targetDate.getDate()).padStart(2, "0")

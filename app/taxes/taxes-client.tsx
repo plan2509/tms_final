@@ -825,7 +825,7 @@ export function TaxesClient() {
               try {
                 const scheduleDays = Number(schedule.days_before || 0)
                 const nDate = new Date(data.due_date)
-                nDate.setDate(nDate.getDate() + scheduleDays)
+                nDate.setDate(nDate.getDate() - scheduleDays) // days_before는 납부기한 이전 날짜
                 const nDateISO = isNaN(nDate.getTime()) ? dueDateISO : nDate.toISOString().split('T')[0]
                 
                 // 미래 날짜만 생성 (과거/오늘은 제외)
@@ -842,7 +842,7 @@ export function TaxesClient() {
                   station_id: data.station_id,
                   notification_date: nDateISO,
                   notification_time: schedule.notification_time || '10:00',
-                  title: `세금 ${Math.abs(scheduleDays)}일 ${scheduleDays < 0 ? '전' : '후'} 알림`,
+                  title: `세금 ${scheduleDays}일 전 알림`,
                   message: `${stationName}의 세금 납부 관련 알림입니다. (기한: ${dueDateHuman})`,
                   teams_channel_id: schedule.teams_channel_id,
                   created_by: userId,
