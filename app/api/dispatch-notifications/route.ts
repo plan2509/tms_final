@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}))
     const notificationType = body.notification_type || req.nextUrl.searchParams.get("type")
 
-너가 자자도ㅣㄴ 알리리    // Load active schedules based on notification type
+    // Load active schedules based on notification type
     let taxSchedules = []
     let stationSchedules = []
     
