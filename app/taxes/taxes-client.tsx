@@ -814,13 +814,17 @@ export function TaxesClient() {
 
         // 스케줄 기반 알림 생성 시도
         try {
+          console.log('세금 알림 스케줄 조회 중...')
           const { data: schedules, error: scheduleErr } = await supabase
             .from('notification_schedules')
             .select('*')
             .eq('notification_type', 'tax')
             .eq('is_active', true)
 
+          console.log('스케줄 조회 결과:', { schedules, scheduleErr })
+          
           if (!scheduleErr && Array.isArray(schedules) && schedules.length > 0) {
+            console.log(`활성화된 세금 스케줄 ${schedules.length}개 발견`)
             for (const schedule of schedules) {
               try {
                 const scheduleDays = Number(schedule.days_before || 0)
@@ -877,6 +881,8 @@ export function TaxesClient() {
           } catch (e) {
             console.warn('기본 알림 생성 중 오류:', e)
           }
+        } else {
+          console.log('스케줄 기반 알림 생성 완료')
         }
       } catch (error) {
         console.error('세금 알림 생성 오류:', error)

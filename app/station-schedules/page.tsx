@@ -299,29 +299,19 @@ export default function StationSchedulesPage() {
         }
       }
 
-      // 알림 생성 (사업 일정 등록 완료 알림)
+      // 사업 일정 등록 완료 시 미입력 알림 삭제
       if (date) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const typeName = type === 'use_approval' ? '사용 승인일' : '안전 점검일'
-          const { error: notificationError } = await supabase
-            .from("notifications")
-            .insert([{
-              user_id: user.id,
-              notification_type: "station_schedule",
-              notification_date: new Date().toISOString().split('T')[0],
-              notification_time: "10:00",
-              title: "사업 일정 등록 완료",
-              message: `${station.station_name} ${typeName}이 등록되었습니다.`,
-              station_id: station.id,
-              is_sent: false
-            }])
-          
-          if (notificationError) {
-            console.error("Notification creation error:", notificationError)
-          } else {
-            console.log(`사업 일정 등록 완료 알림 생성됨: ${station.station_name} ${typeName}`)
-          }
+        const { error: deleteError } = await supabase
+          .from("notifications")
+          .delete()
+          .eq("station_id", station.id)
+          .eq("notification_type", "station_schedule")
+          .like("title", "%미입력%")
+        
+        if (deleteError) {
+          console.error("미입력 알림 삭제 오류:", deleteError)
+        } else {
+          console.log(`미입력 알림 삭제됨: ${station.station_name}`)
         }
       }
 
