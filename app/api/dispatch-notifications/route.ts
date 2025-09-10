@@ -124,19 +124,35 @@ export async function POST(req: NextRequest) {
       for (const [dateStr, { taxes, schedule }] of taxesByDate) {
         const msg = `세금 일정 알림\n대상 건수: ${taxes.length}건\n기한: ${dateStr}`
 
-        const { data: newNotification, error: notificationError } = await supabase
+        // idempotent: avoid duplicates for same schedule/date
+        const { data: existing } = await supabase
           .from("notifications")
-          .insert([{
-            notification_type: "tax",
-            schedule_id: schedule.id,
-            notification_date: todayKst,
-            notification_time: "10:00",
-            message: msg,
-            teams_channel_id: schedule.teams_channel_id,
-            is_sent: false
-          }])
-          .select()
-          .single()
+          .select("id")
+          .eq("notification_type", "tax")
+          .eq("schedule_id", schedule.id)
+          .eq("notification_date", todayKst)
+          .limit(1)
+          .maybeSingle()
+
+        let newNotification: any = existing
+        let notificationError: any = null
+        if (!existing) {
+          const insertRes = await supabase
+            .from("notifications")
+            .insert([{
+              notification_type: "tax",
+              schedule_id: schedule.id,
+              notification_date: todayKst,
+              notification_time: "10:00",
+              message: msg,
+              teams_channel_id: schedule.teams_channel_id,
+              is_sent: false
+            }])
+            .select()
+            .single()
+          newNotification = insertRes.data
+          notificationError = insertRes.error
+        }
 
         if (notificationError) {
           console.error(`[Tax Notification] Failed to create notification:`, notificationError)
@@ -258,19 +274,35 @@ export async function POST(req: NextRequest) {
       msg += `\n💡 사업 일정 페이지에서 해당 충전소들의 일정을 입력해주세요.`
 
       // Create notification in database
-      const { data: newNotification, error: notificationError } = await supabase
+      // idempotent: avoid duplicates for same schedule/date
+      const { data: existing } = await supabase
         .from("notifications")
-        .insert([{
-          notification_type: "station_schedule",
-          schedule_id: sched.id,
-          notification_date: todayKst,
-          notification_time: "10:00",
-          message: msg,
-          teams_channel_id: sched.teams_channel_id,
-          is_sent: false
-        }])
-        .select()
-        .single()
+        .select("id")
+        .eq("notification_type", "station_schedule")
+        .eq("schedule_id", sched.id)
+        .eq("notification_date", todayKst)
+        .limit(1)
+        .maybeSingle()
+
+      let newNotification: any = existing
+      let notificationError: any = null
+      if (!existing) {
+        const insertRes = await supabase
+          .from("notifications")
+          .insert([{
+            notification_type: "station_schedule",
+            schedule_id: sched.id,
+            notification_date: todayKst,
+            notification_time: "10:00",
+            message: msg,
+            teams_channel_id: sched.teams_channel_id,
+            is_sent: false
+          }])
+          .select()
+          .single()
+        newNotification = insertRes.data
+        notificationError = insertRes.error
+      }
 
       if (notificationError) {
         console.error(`[Station Schedule Notification] Failed to create notification:`, notificationError)

@@ -847,31 +847,9 @@ export function TaxesClient() {
           }
         } catch {}
 
-        // 스케줄로 하나도 생성 못 했으면 확장 스키마 단건 → 실패 시 최소 스키마 폴백
+        // 스케줄이 없으면 알림 생성 안 함 (스케줄 기반 알림만 사용)
         if (!createdViaSchedules) {
-          const { error: extendedErr } = await supabase
-            .from('notifications')
-            .insert({
-              notification_type: 'tax',
-              tax_id: data.id,
-              station_id: data.station_id,
-              notification_date: dueDateISO,
-              notification_time: '10:00',
-              is_sent: false,
-              created_by: userId,
-              title: '세금 등록 완료',
-              message: `${stationName}의 세금이 등록되었습니다. (금액: ${taxAmount}원, 납부기한: ${dueDateHuman})`,
-            })
-
-          if (extendedErr) {
-            const { error: minimalErr } = await supabase.from('notifications').insert({
-              user_id: userId,
-              title: '세금 등록 완료',
-              message: `${stationName}의 세금이 등록되었습니다. (금액: ${taxAmount}원, 납부기한: ${dueDateHuman})`,
-              type: 'tax',
-            })
-            if (minimalErr) console.error('알림 생성 실패(폴백도 실패):', minimalErr)
-          }
+          console.log('알림 스케줄이 없어서 알림을 생성하지 않습니다.')
         }
       } catch (error) {
         console.error('세금 알림 생성 오류:', error)
@@ -1007,6 +985,20 @@ export function TaxesClient() {
     } else {
       console.log("[v0] Status change successful:", data)
       setTaxes(taxes.map((t) => (t.id === taxId ? data : t)))
+      // 납부 완료 시, 미래 예약 알림 자동 삭제
+      if (newStatus === "payment_completed") {
+        try {
+          const todayISO = new Date().toISOString().split('T')[0]
+          const { error: delErr } = await supabase
+            .from('notifications')
+            .delete()
+            .eq('tax_id', taxId)
+            .gt('notification_date', todayISO)
+          if (delErr) console.warn('미래 알림 삭제 실패:', delErr.message)
+        } catch (e) {
+          console.warn('미래 알림 삭제 중 오류:', e)
+        }
+      }
       toast({
         title: "성공",
         description: "상태가 성공적으로 변경되었습니다.",
@@ -1020,6 +1012,17 @@ export function TaxesClient() {
     if (!isAdmin) return
 
     setIsLoading(true)
+
+    // 세금 삭제 전 관련 알림 전체 삭제
+    try {
+      const { error: delErr } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('tax_id', taxId)
+      if (delErr) console.warn('세금 관련 알림 삭제 실패:', delErr.message)
+    } catch (e) {
+      console.warn('세금 관련 알림 삭제 중 오류:', e)
+    }
 
     const { error } = await supabase.from("taxes").delete().eq("id", taxId)
 
