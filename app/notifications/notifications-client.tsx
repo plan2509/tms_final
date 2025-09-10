@@ -141,10 +141,6 @@ export function NotificationsClient() {
             teams_channels (
               id,
               channel_name
-            ),
-            notification_schedules (
-              name,
-              days_before
             )
           `)
           .order("created_at", { ascending: false })
@@ -803,10 +799,6 @@ export function NotificationsClient() {
           teams_channels (
             id,
             channel_name
-          ),
-          notification_schedules (
-            name,
-            days_before
           )
         `)
         .order("created_at", { ascending: false })
