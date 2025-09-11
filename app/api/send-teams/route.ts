@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const webhookUrls: string[] = Array.isArray(body?.webhookUrls) ? body.webhookUrls : []
     const channelIds: string[] = Array.isArray(body?.channelIds) ? body.channelIds : []
+    const notificationId: string | null = typeof body?.notificationId === "string" ? body.notificationId : null
     const text: string = typeof body?.text === "string" && body.text.trim().length > 0 ? body.text : `TMS 테스트 메시지 (${new Date().toLocaleString("ko-KR")})`
 
     let urls = webhookUrls
@@ -55,6 +57,28 @@ export async function POST(request: NextRequest) {
       } catch {
         fail++
       }
+    }
+
+    // Optionally mark a notification as sent using service role (bypass RLS issues)
+    if (notificationId) {
+      const admin = createAdminClient()
+      const sent = fail === 0 && ok > 0
+      await admin
+        .from("notifications")
+        .update({
+          is_sent: sent,
+          sent_at: sent ? new Date().toISOString() : null,
+          error_message: sent ? null : "Teams 발송 실패",
+          last_attempt_at: new Date().toISOString(),
+        })
+        .eq("id", notificationId)
+
+      await admin.from("notification_logs").insert({
+        notification_id: notificationId,
+        send_status: sent ? "success" : "failed",
+        error_message: sent ? null : "Teams 발송 실패",
+        sent_at: new Date().toISOString(),
+      })
     }
 
     return NextResponse.json({ success: true, sent: ok, failed: fail })

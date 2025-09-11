@@ -94,14 +94,11 @@ export async function POST(req: NextRequest) {
     const webhooksAll = (channels || []).map((c: any) => c.webhook_url)
     const idToWebhook = new Map((channels || []).map((c: any) => [c.id, c.webhook_url]))
 
-    // Process tax notifications (only if there are active tax schedules)
+    // Process tax notifications (per tax, per schedule)
     if (taxSchedules && taxSchedules.length > 0) {
-      // Group taxes by due date to avoid duplicates
-      const taxesByDate = new Map()
-      
       for (const sched of taxSchedules as any[]) {
         const targetDate = new Date(now)
-        targetDate.setDate(now.getDate() + sched.days_before) // days_before일 후의 납부기한을 찾음
+        targetDate.setDate(now.getDate() + sched.days_before)
         const y = targetDate.getFullYear()
         const m = String(targetDate.getMonth() + 1).padStart(2, "0")
         const d = String(targetDate.getDate()).padStart(2, "0")
@@ -113,82 +110,80 @@ export async function POST(req: NextRequest) {
           .eq("due_date", dateStr)
         if (taxErr) throw taxErr
 
-        if (taxes && taxes.length > 0) {
-          if (!taxesByDate.has(dateStr)) {
-            taxesByDate.set(dateStr, { taxes, schedule: sched })
-          }
-        }
-      }
+        for (const tax of taxes || []) {
+          const msg = [
+            `세금 납부일 알림입니다.`,
+            `${tax.charging_stations?.station_name || '-'} / ${tax.tax_type || '-'} / ${tax.due_date}`,
+            `https://tms.watercharging.com/`
+          ].join("\n")
 
-      // Create one notification per due date
-      for (const [dateStr, { taxes, schedule }] of taxesByDate) {
-        const msg = `세금 일정 알림\n대상 건수: ${taxes.length}건\n기한: ${dateStr}`
-
-        // idempotent: avoid duplicates for same schedule/date
-        const { data: existing } = await supabase
-          .from("notifications")
-          .select("id")
-          .eq("notification_type", "tax")
-          .eq("schedule_id", schedule.id)
-          .eq("notification_date", todayKst)
-          .limit(1)
-          .maybeSingle()
-
-        let newNotification: any = existing
-        let notificationError: any = null
-        if (!existing) {
-          const insertRes = await supabase
+          // idempotent per tax+schedule+date
+          const { data: existing } = await supabase
             .from("notifications")
-            .insert([{
-              notification_type: "tax",
-              schedule_id: schedule.id,
-              notification_date: todayKst,
-              notification_time: "10:00",
-              message: msg,
-              teams_channel_id: schedule.teams_channel_id,
-              is_sent: false
-            }])
-            .select()
-            .single()
-          newNotification = insertRes.data
-          notificationError = insertRes.error
-        }
+            .select("id")
+            .eq("notification_type", "tax")
+            .eq("schedule_id", sched.id)
+            .eq("tax_id", tax.id)
+            .eq("notification_date", todayKst)
+            .limit(1)
+            .maybeSingle()
 
-        if (notificationError) {
-          console.error(`[Tax Notification] Failed to create notification:`, notificationError)
-          continue
-        }
-
-        // Send teams
-        const targetWebhook = schedule.teams_channel_id ? idToWebhook.get(schedule.teams_channel_id) : null
-        const targets = targetWebhook ? [targetWebhook] : webhooksAll
-        let sendSuccess = true
-        
-        if (targets.length > 0) {
-          const sendResults = await Promise.allSettled(
-            targets.map((url: string) =>
-              fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
-            ),
-          )
-          
-          const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
-          if (failedSends.length > 0) {
-            console.error(`[Tax Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
-            sendSuccess = false
+          let newNotification: any = existing
+          let notificationError: any = null
+          if (!existing) {
+            const insertRes = await supabase
+              .from("notifications")
+              .insert([{
+                notification_type: "tax",
+                schedule_id: sched.id,
+                tax_id: tax.id,
+                notification_date: todayKst,
+                notification_time: "10:00",
+                message: msg,
+                teams_channel_id: sched.teams_channel_id,
+                is_sent: false
+              }])
+              .select()
+              .single()
+            newNotification = insertRes.data
+            notificationError = insertRes.error
           }
+
+          if (notificationError) {
+            console.error(`[Tax Notification] Failed to create notification:`, notificationError)
+            continue
+          }
+
+          const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
+          const targets = targetWebhook ? [targetWebhook] : webhooksAll
+          let sendSuccess = true
+
+          if (targets.length > 0) {
+            const sendResults = await Promise.allSettled(
+              targets.map((url: string) =>
+                fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
+              ),
+            )
+
+            const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
+            if (failedSends.length > 0) {
+              console.error(`[Tax Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
+              sendSuccess = false
+            }
+          }
+
+          await supabase
+            .from("notifications")
+            .update({ 
+              is_sent: sendSuccess, 
+              sent_at: sendSuccess ? new Date().toISOString() : null,
+              error_message: sendSuccess ? null : "Teams 발송 실패",
+              last_attempt_at: new Date().toISOString()
+            })
+            .eq("id", newNotification.id)
+
+          dispatched += 1
         }
-
-        await supabase
-          .from("notifications")
-          .update({ 
-            is_sent: sendSuccess, 
-            sent_at: sendSuccess ? new Date().toISOString() : null,
-            error_message: sendSuccess ? null : "Teams 발송 실패",
-            last_attempt_at: new Date().toISOString()
-          })
-          .eq("id", newNotification.id)
-
-        dispatched += taxes.length
       }
     }
 
@@ -251,27 +246,25 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      let msg = `🚨 충전소 일정 미입력 알림 (생성 후 ${sched.days_before}일 경과)\n\n`
-      msg += "⚠️ 다음 충전소들의 일정 입력이 필요합니다:\n\n"
+      let msg = ``
 
-      if (missingUseApprovalStations.length > 0) {
-        msg += `📋 사용 승인일 미입력 (캐노피 설치 충전소):\n`
-        missingUseApprovalStations.forEach((station: any) => {
-          msg += `• ${station.station_name} - ${station.location} (${station.missing_days}일 경과)\n`
-        })
-        msg += "\n"
+      // If exactly one missing station, send single-station message per requirement
+      const missingStations = [...missingUseApprovalStations, ...missingSafetyInspectionStations]
+      if (missingStations.length === 1) {
+        const s = missingStations[0]
+        msg = [
+          `${s.station_name} 사용 승인일 미입력 상태입니다.`,
+          `날짜를 입력해 주세요.`,
+          `https://tms.watercharging.com/`
+        ].join("\n")
+      } else {
+        // Fallback: summarize many
+        msg = [
+          `사용 승인일/안전 점검일 미입력 충전소 ${missingStations.length}곳`,
+          `날짜를 입력해 주세요.`,
+          `https://tms.watercharging.com/`
+        ].join("\n")
       }
-
-      if (missingSafetyInspectionStations.length > 0) {
-        msg += `🔍 안전 점검일 미입력:\n`
-        missingSafetyInspectionStations.forEach((station: any) => {
-          msg += `• ${station.station_name} - ${station.location} (${station.missing_days}일 경과)\n`
-        })
-        msg += "\n"
-      }
-
-      msg += `총 ${missingUseApprovalStations.length + missingSafetyInspectionStations.length}개 충전소의 일정 입력이 필요합니다.\n`
-      msg += `\n💡 사업 일정 페이지에서 해당 충전소들의 일정을 입력해주세요.`
 
       // Create notification in database
       // idempotent: avoid duplicates for same schedule/date

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client"
 import {
   BarChart,
   Bar,
@@ -82,12 +82,11 @@ export function StatisticsClient() {
 
   useEffect(() => {
     try {
-      const client = createBrowserClient()
+      const client = createClient()
       setSupabase(client)
       fetchStatistics(client)
     } catch (error) {
       console.error("Failed to initialize Supabase client:", error)
-      // 환경 변수가 없을 때의 fallback 처리
       setSupabase(null)
       setLoading(false)
     }

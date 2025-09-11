@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client"
 
 interface TaxEvent {
   id: string
@@ -97,11 +97,10 @@ export function CalendarClient() {
 
   useEffect(() => {
     try {
-      const client = createBrowserClient()
+      const client = createClient()
       setSupabase(client)
     } catch (error) {
       console.error("Failed to initialize Supabase client:", error)
-      // 환경 변수가 없을 때의 fallback 처리
       setSupabase(null)
     }
   }, [])

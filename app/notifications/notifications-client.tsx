@@ -564,21 +564,16 @@ export function NotificationsClient() {
 
     try {
 
-      // Send Teams notification using the same API as test notifications
+      // Send Teams notification using the same API and let API mark it sent
       if (teamsChannels.length > 0) {
-        const channelIds = notification.teams_channel_id 
-          ? [notification.teams_channel_id] 
+        const channelIds = notification.teams_channel_id
+          ? [notification.teams_channel_id]
           : teamsChannels.map((c) => c.id)
-        
+
         const teamsResponse = await fetch("/api/send-teams", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            channelIds: channelIds,
-            text: notification.message,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channelIds, text: notification.message, notificationId }),
         })
 
         if (!teamsResponse.ok) {
@@ -592,13 +587,9 @@ export function NotificationsClient() {
         }
       }
 
+      // Refresh notification row
       const { data, error } = await supabase
         .from("notifications")
-        .update({
-          is_sent: true,
-          sent_at: new Date().toISOString(),
-        })
-        .eq("id", notificationId)
         .select(`
           *,
           taxes (
@@ -616,19 +607,11 @@ export function NotificationsClient() {
             channel_name
           )
         `)
+        .eq("id", notificationId)
         .single()
 
       if (error) throw error
 
-      await supabase.from("notification_logs").insert([
-        {
-          notification_id: notificationId,
-          send_status: "success",
-          sent_at: new Date().toISOString(),
-        },
-      ])
-
-      // 강제로 상태 업데이트
       setNotifications(prevNotifications => prevNotifications.map((n) => (n.id === notificationId ? data : n)))
 
       toast({
