@@ -263,93 +263,96 @@ export async function POST(req: NextRequest) {
         for (const s of missingStations) {
           const useMissing = useSet.has(s.id)
           const safetyMissing = safetySet.has(s.id)
-          const label = useMissing && safetyMissing
-            ? "사용 승인일/안전 점검일"
-            : useMissing
-              ? "사용 승인일"
-              : "안전 점검일"
+          const missingTypes: Array<'use_approval'|'safety_inspection'> = []
+          if (useMissing) missingTypes.push('use_approval')
+          if (safetyMissing) missingTypes.push('safety_inspection')
 
-          const msg = [
-            `${s.station_name} ${label} 미입력 상태입니다.`,
-            `날짜를 입력해 주세요.`,
-            `https://tms.watercharging.com/`
-          ].join("\n")
+          for (const missingType of missingTypes) {
+            const label = missingType === 'use_approval' ? '사용 승인일' : '안전 점검일'
+            const msg = [
+              `${s.station_name} ${label} 미입력 상태입니다.`,
+              `날짜를 입력해 주세요.`,
+              `https://tms.watercharging.com/`
+            ].join("\n")
 
-          // idempotent per station+schedule+date
-          const { data: existing } = await supabase
-            .from("notifications")
-            .select("id")
-            .eq("notification_type", "station_schedule")
-            .eq("schedule_id", sched.id)
-            .eq("station_id", s.id)
-            .eq("notification_date", todayKst)
-            .limit(1)
-            .maybeSingle()
-
-          let newNotification: any = existing
-          let notificationError: any = null
-          if (!existing) {
-            const insertRes = await supabase
+            // idempotent per station+schedule+date+missingType
+            const { data: existing } = await supabase
               .from("notifications")
-              .insert([{
-                notification_type: "station_schedule",
-                schedule_id: sched.id,
-                station_id: s.id,
-                notification_date: todayKst,
-                notification_time: "10:00",
-                message: msg,
-                teams_channel_id: sched.teams_channel_id,
-                is_sent: false
-              }])
-              .select()
-              .single()
-            newNotification = insertRes.data
-            notificationError = insertRes.error
-          } else {
-            // 기존 레코드도 메시지 포맷을 최신으로 동기화
+              .select("id")
+              .eq("notification_type", "station_schedule")
+              .eq("schedule_id", sched.id)
+              .eq("station_id", s.id)
+              .eq("notification_date", todayKst)
+              .eq("station_missing_type", missingType)
+              .limit(1)
+              .maybeSingle()
+
+            let newNotification: any = existing
+            let notificationError: any = null
+            if (!existing) {
+              const insertRes = await supabase
+                .from("notifications")
+                .insert([{
+                  notification_type: "station_schedule",
+                  schedule_id: sched.id,
+                  station_id: s.id,
+                  station_missing_type: missingType,
+                  notification_date: todayKst,
+                  notification_time: "10:00",
+                  message: msg,
+                  teams_channel_id: sched.teams_channel_id,
+                  is_sent: false
+                }])
+                .select()
+                .single()
+              newNotification = insertRes.data
+              notificationError = insertRes.error
+            } else {
+              // 기존 레코드도 메시지 포맷을 최신으로 동기화
+              await supabase
+                .from("notifications")
+                .update({ message: msg })
+                .eq("id", existing.id)
+            }
+
+            if (notificationError) {
+              console.error(`[Station Schedule Notification] Failed to create notification:`, notificationError)
+              continue
+            }
+
+            // Send teams to selected channel or all
+            const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
+            const targets = targetWebhook ? [targetWebhook] : webhooksAll
+            let sendSuccess = true
+            
+            if (targets.length > 0) {
+              const sendResults = await Promise.allSettled(
+                targets.map((url: string) =>
+                  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
+                ),
+              )
+              
+              // Check for failed sends
+              const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
+              if (failedSends.length > 0) {
+                console.error(`[Station Schedule Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
+                sendSuccess = false
+              }
+            }
+
+            // Update notification status
             await supabase
               .from("notifications")
-              .update({ message: msg })
-              .eq("id", existing.id)
+              .update({ 
+                is_sent: sendSuccess, 
+                sent_at: sendSuccess ? new Date().toISOString() : null,
+                error_message: sendSuccess ? null : "Teams 발송 실패",
+                last_attempt_at: new Date().toISOString()
+              })
+              .eq("id", newNotification.id)
+
+            dispatchedStation += 1
           }
-
-          if (notificationError) {
-            console.error(`[Station Schedule Notification] Failed to create notification:`, notificationError)
-            continue
-          }
-
-          // Send teams to selected channel or all
-          const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
-          const targets = targetWebhook ? [targetWebhook] : webhooksAll
-          let sendSuccess = true
-          
-          if (targets.length > 0) {
-            const sendResults = await Promise.allSettled(
-              targets.map((url: string) =>
-                fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
-              ),
-            )
-            
-            // Check for failed sends
-            const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
-            if (failedSends.length > 0) {
-              console.error(`[Station Schedule Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
-              sendSuccess = false
-            }
-          }
-
-          // Update notification status
-          await supabase
-            .from("notifications")
-            .update({ 
-              is_sent: sendSuccess, 
-              sent_at: sendSuccess ? new Date().toISOString() : null,
-              error_message: sendSuccess ? null : "Teams 발송 실패",
-              last_attempt_at: new Date().toISOString()
-            })
-            .eq("id", newNotification.id)
-
-          dispatchedStation += 1
         }
       }
     }

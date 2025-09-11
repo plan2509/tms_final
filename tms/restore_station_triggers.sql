@@ -65,14 +65,29 @@ begin
     where notification_type = 'station_schedule' and is_active = true
   loop
     target_date := created_kst + sched.days_before;
-    msg := new.station_name || ' 사용 승인일 미입력 상태입니다.' || E'\n' ||
+
+    -- 사용 승인일 (캐노피 설치된 경우만)
+    if (new.canopy_installed is true) then
+      msg := new.station_name || ' 사용 승인일 미입력 상태입니다.' || E'\n' ||
+             '날짜를 입력해 주세요.' || E'\n' ||
+             'https://tms.watercharging.com/';
+
+      insert into public.notifications (
+        notification_type, schedule_id, station_id, station_missing_type, notification_date, notification_time, message, teams_channel_id, is_sent
+      ) values (
+        'station_schedule', sched.id, new.id, 'use_approval', target_date, '10:00', msg, sched.teams_channel_id, false
+      ) on conflict (notification_type, station_id, schedule_id, notification_date) do nothing;
+    end if;
+
+    -- 안전 점검일 (항상)
+    msg := new.station_name || ' 안전 점검일 미입력 상태입니다.' || E'\n' ||
            '날짜를 입력해 주세요.' || E'\n' ||
            'https://tms.watercharging.com/';
 
     insert into public.notifications (
-      notification_type, schedule_id, station_id, notification_date, notification_time, message, teams_channel_id, is_sent
+      notification_type, schedule_id, station_id, station_missing_type, notification_date, notification_time, message, teams_channel_id, is_sent
     ) values (
-      'station_schedule', sched.id, new.id, target_date, '10:00', msg, sched.teams_channel_id, false
+      'station_schedule', sched.id, new.id, 'safety_inspection', target_date, '10:00', msg, sched.teams_channel_id, false
     ) on conflict (notification_type, station_id, schedule_id, notification_date) do nothing;
   end loop;
   return new;
