@@ -1318,26 +1318,57 @@ export function NotificationsClient() {
                 </Button>
               </div>
 
-              <Button
-                variant="outline"
-                className="gap-2 bg-transparent"
-                onClick={async () => {
-                  try {
-                    setIsActionLoading(true)
-                    const res = await fetch("/api/dispatch-notifications", { method: "POST" })
-                    const json = await res.json()
-                    if (!res.ok || !json.success) throw new Error(json.error || "failed")
-                    toast({ title: "성공", description: `스케줄 기반 알림 발송 처리: ${json.dispatched}건` })
-                  } catch (e) {
-                    toast({ title: "오류", description: "스케줄 발송 처리 실패", variant: "destructive" })
-                  } finally {
-                    setIsActionLoading(false)
-                  }
-                }}
-                disabled={isActionLoading}
-              >
-                {isActionLoading ? "처리 중..." : "스케줄 즉시 실행"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="gap-2 bg-transparent"
+                  onClick={async () => {
+                    try {
+                      setIsActionLoading(true)
+                      const res = await fetch("/api/dispatch-notifications", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ notification_type: "tax" }),
+                      })
+                      const json = await res.json()
+                      if (!res.ok || !json.success) throw new Error(json.error || "failed")
+                      toast({ title: "성공", description: `세금 스케줄 처리: ${json.dispatched || 0}건` })
+                    } catch (e) {
+                      toast({ title: "오류", description: "세금 스케줄 처리 실패", variant: "destructive" })
+                    } finally {
+                      setIsActionLoading(false)
+                    }
+                  }}
+                  disabled={isActionLoading}
+                >
+                  {isActionLoading ? "처리 중..." : "세금 스케줄 즉시 실행"}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="gap-2 bg-transparent"
+                  onClick={async () => {
+                    try {
+                      setIsActionLoading(true)
+                      const res = await fetch("/api/dispatch-notifications", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ notification_type: "station_schedule" }),
+                      })
+                      const json = await res.json()
+                      if (!res.ok || !json.success) throw new Error(json.error || "failed")
+                      toast({ title: "성공", description: `충전소 스케줄 처리: ${json.dispatchedStation || 0}건` })
+                    } catch (e) {
+                      toast({ title: "오류", description: "충전소 스케줄 처리 실패", variant: "destructive" })
+                    } finally {
+                      setIsActionLoading(false)
+                    }
+                  }}
+                  disabled={isActionLoading}
+                >
+                  {isActionLoading ? "처리 중..." : "충전소 스케줄 즉시 실행"}
+                </Button>
+              </div>
             </div>
           )}
 
