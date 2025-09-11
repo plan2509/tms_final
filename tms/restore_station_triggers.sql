@@ -12,6 +12,25 @@ do $$ begin
   end if;
 end $$;
 
+-- 4.1) Function: cleanup when station deleted
+create or replace function public.fn_station_delete_cleanup()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.notifications
+  where notification_type = 'station_schedule'
+    and station_id = old.id;
+
+  delete from public.station_schedules
+  where station_id = old.id;
+
+  return old;
+end;
+$$;
+
 -- 2) Function: ensure station_schedules row exists on station insert
 create or replace function public.fn_station_create_schedules()
 returns trigger
@@ -97,6 +116,12 @@ do $$ begin
     create trigger tr_station_schedule_completion_cleanup
     after update on public.station_schedules
     for each row execute function public.fn_station_schedule_completion_cleanup();
+  end if;
+
+  if not exists (select 1 from pg_trigger where tgname = 'tr_station_delete_cleanup') then
+    create trigger tr_station_delete_cleanup
+    after delete on public.charging_stations
+    for each row execute function public.fn_station_delete_cleanup();
   end if;
 end $$;
 
