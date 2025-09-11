@@ -472,7 +472,7 @@ export function TaxesClient() {
               } else if (str.includes('재산') || str.includes('property')) {
                 taxType = 'property'
               } else if (str.includes('지방') || str.includes('local')) {
-                taxType = 'local'
+                taxType = 'other'
               } else {
                 taxType = 'other'
               }
@@ -658,7 +658,7 @@ export function TaxesClient() {
       // 샘플 데이터 행들
       ['거제 성포해안도로 위판장우측주차장', '취득세', 500000, '2025-09-08'],
       ['서울역 충전소', '재산세', 300000, '2024-12-31'],
-      ['강남역 충전소', '지방세', 150000, '2024-11-30'],
+      ['강남역 충전소', '기타세', 150000, '2024-11-30'],
       ['', '', '', ''], // 빈 행 (사용자가 입력할 수 있도록)
       ['', '', '', ''], // 빈 행
       ['', '', '', ''], // 빈 행
@@ -740,7 +740,7 @@ export function TaxesClient() {
     console.log("[v0] Tax registration proceeding - admin permissions confirmed")
     setIsLoading(true)
 
-    const taxType = formData.get("tax_type") as "acquisition" | "property" | "local" | "other"
+    const taxType = formData.get("tax_type") as "acquisition" | "property" | "other"
     const defaultStatus = taxType === "acquisition" ? "accounting_review" : "payment_scheduled"
 
     const stationIdFromForm = (formData.get("charging_station_id") as string) || ""
@@ -832,7 +832,7 @@ export function TaxesClient() {
 
     const taxData = {
       station_id: stationIdFromForm,
-      tax_type: formData.get("tax_type") as "acquisition" | "property" | "local" | "other",
+      tax_type: formData.get("tax_type") as "acquisition" | "property" | "other",
       tax_amount: Number.parseFloat(formData.get("tax_amount") as string),
       due_date: formData.get("due_date") as string,
       tax_notice_number: (formData.get("tax_notice_number") as string) || null,
@@ -1690,7 +1690,6 @@ export function TaxesClient() {
             <SelectItem value="all">모든 유형</SelectItem>
             <SelectItem value="acquisition">취득세</SelectItem>
             <SelectItem value="property">재산세</SelectItem>
-            <SelectItem value="local">지방세</SelectItem>
             <SelectItem value="other">기타세</SelectItem>
           </SelectContent>
         </Select>
