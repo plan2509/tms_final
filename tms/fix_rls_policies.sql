@@ -30,8 +30,8 @@ set search_path = public
 as $$
 declare
   sched record;
-  today date := (now() at time zone 'Asia/Seoul')::date;
-  days_since int;
+  created_kst date := (new.created_at at time zone 'Asia/Seoul')::date;
+  target_date date;
   msg text;
 begin
   -- iterate active station schedules
@@ -40,18 +40,16 @@ begin
     from public.notification_schedules
     where notification_type = 'station_schedule' and is_active = true
   loop
-    days_since := (today - new.created_at::date);
-    if days_since >= sched.days_before then
-      msg := new.station_name || ' 사용 승인일 미입력 상태입니다.' || E'\n' ||
-             '날짜를 입력해 주세요.' || E'\n' ||
-             'https://tms.watercharging.com/';
+    target_date := created_kst + sched.days_before;
+    msg := new.station_name || ' 사용 승인일 미입력 상태입니다.' || E'\n' ||
+           '날짜를 입력해 주세요.' || E'\n' ||
+           'https://tms.watercharging.com/';
 
-      insert into public.notifications (
-        notification_type, schedule_id, station_id, notification_date, notification_time, message, teams_channel_id, is_sent
-      ) values (
-        'station_schedule', sched.id, new.id, today, '10:00', msg, sched.teams_channel_id, false
-      ) on conflict on constraint ux_notifications_station_sched do nothing;
-    end if;
+    insert into public.notifications (
+      notification_type, schedule_id, station_id, notification_date, notification_time, message, teams_channel_id, is_sent
+    ) values (
+      'station_schedule', sched.id, new.id, target_date, '10:00', msg, sched.teams_channel_id, false
+    ) on conflict on constraint ux_notifications_station_sched do nothing;
   end loop;
   return new;
 end;
