@@ -147,6 +147,12 @@ export async function POST(req: NextRequest) {
               .single()
             newNotification = insertRes.data
             notificationError = insertRes.error
+          } else {
+            // 기존 레코드도 메시지 포맷을 최신으로 동기화
+            await supabase
+              .from("notifications")
+              .update({ message: msg })
+              .eq("id", existing.id)
           }
 
           if (notificationError) {
@@ -295,6 +301,12 @@ export async function POST(req: NextRequest) {
           .single()
         newNotification = insertRes.data
         notificationError = insertRes.error
+      } else {
+        // 기존 레코드도 메시지 포맷을 최신으로 동기화
+        await supabase
+          .from("notifications")
+          .update({ message: msg })
+          .eq("id", existing.id)
       }
 
       if (notificationError) {
