@@ -111,9 +111,10 @@ export async function POST(req: NextRequest) {
         if (taxErr) throw taxErr
 
         for (const tax of taxes || []) {
+          const taxTypeMap: any = { acquisition: '취득세', property: '재산세', other: '기타세' }
           const msg = [
             `세금 납부일 알림입니다.`,
-            `${tax.charging_stations?.station_name || '-'} / ${tax.tax_type || '-'} / ${tax.due_date}`,
+            `${tax.charging_stations?.station_name || '-'} / ${taxTypeMap[tax.tax_type] || '기타세'} / ${tax.due_date}`,
             `https://tms.watercharging.com/`
           ].join("\n")
 

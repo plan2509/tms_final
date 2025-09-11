@@ -25,7 +25,7 @@ import * as XLSX from 'xlsx'
 interface Tax {
   id: string
   station_id: string
-  tax_type: "acquisition" | "property" | "local" | "other"
+  tax_type: "acquisition" | "property" | "other"
   tax_amount: number
   due_date: string
   tax_notice_number: string | null
@@ -53,7 +53,6 @@ interface Station {
 const taxTypeLabels = {
   acquisition: "취득세",
   property: "재산세",
-  local: "지방세",
   other: "기타세",
 }
 
