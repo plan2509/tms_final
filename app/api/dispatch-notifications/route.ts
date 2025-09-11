@@ -248,6 +248,10 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Build membership sets
+        const useSet = new Set((missingUseApprovalStations || []).map((s: any) => s.id))
+        const safetySet = new Set((missingSafetyInspectionStations || []).map((s: any) => s.id))
+
         // De-duplicate stations (if both dates missing)
         const dedupMap = new Map<string, any>()
         for (const s of missingUseApprovalStations) dedupMap.set(s.id, s)
@@ -257,8 +261,16 @@ export async function POST(req: NextRequest) {
         if (missingStations.length === 0) continue
 
         for (const s of missingStations) {
+          const useMissing = useSet.has(s.id)
+          const safetyMissing = safetySet.has(s.id)
+          const label = useMissing && safetyMissing
+            ? "사용 승인일/안전 점검일"
+            : useMissing
+              ? "사용 승인일"
+              : "안전 점검일"
+
           const msg = [
-            `${s.station_name} 사용 승인일 미입력 상태입니다.`,
+            `${s.station_name} ${label} 미입력 상태입니다.`,
             `날짜를 입력해 주세요.`,
             `https://tms.watercharging.com/`
           ].join("\n")
