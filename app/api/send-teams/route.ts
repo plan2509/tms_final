@@ -19,10 +19,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const webhookUrls: string[] = Array.isArray(body?.webhookUrls) ? body.webhookUrls : []
-    const channelIds: string[] = Array.isArray(body?.channelIds) ? body.channelIds : []
+    let webhookUrls: string[] = Array.isArray(body?.webhookUrls) ? body.webhookUrls : []
+    let channelIds: string[] = Array.isArray(body?.channelIds) ? body.channelIds : []
     const notificationId: string | null = typeof body?.notificationId === "string" ? body.notificationId : null
-    const text: string = typeof body?.text === "string" && body.text.trim().length > 0 ? body.text : `TMS 테스트 메시지 (${new Date().toLocaleString("ko-KR")})`
+    let text: string = typeof body?.text === "string" && body.text.trim().length > 0 ? body.text : `TMS 테스트 메시지 (${new Date().toLocaleString("ko-KR")})`
 
     let urls = webhookUrls
     if (channelIds.length > 0) {
@@ -39,6 +39,79 @@ export async function POST(request: NextRequest) {
 
     // dedupe
     urls = Array.from(new Set(urls.filter((u) => typeof u === "string" && u.startsWith("http"))))
+    
+    // If notificationId provided, load row and normalize message + default channel
+    if (notificationId) {
+      const admin = createAdminClient()
+      const { data: nRow } = await admin
+        .from("notifications")
+        .select(`
+          id, notification_type, tax_id, station_id, teams_channel_id,
+          taxes (
+            id, tax_type, due_date, charging_stations ( station_name )
+          )
+        `)
+        .eq("id", notificationId)
+        .maybeSingle()
+
+      if (nRow) {
+        // Build message templates
+        if (nRow.notification_type === 'tax' && nRow.taxes) {
+          const stationName = nRow.taxes.charging_stations?.station_name || '-'
+          const taxTypeMap: Record<string, string> = { acquisition: '취득세', property: '재산세', other: '기타세' }
+          const taxType = taxTypeMap[nRow.taxes.tax_type as string] || nRow.taxes.tax_type || '-'
+          const due = nRow.taxes.due_date
+          text = [
+            `세금 납부일 알림입니다.`,
+            `${stationName} / ${taxType} / ${due}`,
+            `https://tms.watercharging.com/`
+          ].join('\n')
+        } else if (nRow.notification_type === 'station_schedule') {
+          // We only know station context; use single-station template
+          // Try to resolve station name (best-effort)
+          let stationName = '-'
+          if (nRow.station_id) {
+            const { data: st } = await admin
+              .from('charging_stations')
+              .select('station_name')
+              .eq('id', nRow.station_id)
+              .maybeSingle()
+            stationName = st?.station_name || '-'
+          }
+          text = [
+            `${stationName} 사용 승인일 미입력 상태입니다.`,
+            `날짜를 입력해 주세요.`,
+            `https://tms.watercharging.com/`
+          ].join('\n')
+        }
+
+        // If no urls resolved yet, determine from notification's channel or active channels
+        if (urls.length === 0) {
+          if (nRow.teams_channel_id) {
+            const { data: ch } = await admin
+              .from('teams_channels')
+              .select('webhook_url')
+              .eq('id', nRow.teams_channel_id)
+              .eq('is_active', true)
+              .maybeSingle()
+            if (ch?.webhook_url) urls.push(ch.webhook_url)
+          } else {
+            const { data: actives } = await admin
+              .from('teams_channels')
+              .select('webhook_url')
+              .eq('is_active', true)
+            urls.push(...(actives || []).map((c: any) => c.webhook_url))
+          }
+        }
+
+        // Persist normalized message for UI consistency
+        await admin
+          .from('notifications')
+          .update({ message: text })
+          .eq('id', notificationId)
+      }
+    }
+
     if (urls.length === 0) {
       return NextResponse.json({ success: false, error: "No webhook URLs provided" }, { status: 400 })
     }
