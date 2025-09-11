@@ -233,7 +233,6 @@ export function StationsClient() {
       address: (formData.get("address") as string) || null,
       status: formData.get("status") as "operating" | "planned" | "terminated",
       canopy_installed: formData.get("canopy_installed") === "on",
-      created_by: userId,
     }
 
     const { data, error } = await supabase.from("charging_stations").insert([stationData]).select().single()
