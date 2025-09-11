@@ -30,6 +30,7 @@ interface Notification {
   created_at: string
   error_message?: string | null
   last_attempt_at?: string | null
+  station_id?: string | null
   taxes?: {
     id: string
     tax_type: string
@@ -104,6 +105,7 @@ export function NotificationsClient() {
   const [isActionLoading, setIsActionLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const [stationsMap, setStationsMap] = useState<Record<string, { station_name: string; created_at: string }>>({})
 
   useEffect(() => {
     const fetchData = async () => {
@@ -167,6 +169,18 @@ export function NotificationsClient() {
 
         if (taxesData) {
           setTaxes(taxesData)
+        }
+
+        // 충전소 기본 정보 맵 생성 (station_schedule 표시용)
+        const { data: stationBasics } = await supabase
+          .from("charging_stations")
+          .select("id, station_name, created_at")
+        if (stationBasics) {
+          const map: Record<string, { station_name: string; created_at: string }> = {}
+          stationBasics.forEach((s: any) => {
+            map[s.id] = { station_name: s.station_name, created_at: s.created_at }
+          })
+          setStationsMap(map)
         }
 
       } catch (error) {
@@ -316,6 +330,16 @@ export function NotificationsClient() {
                   <span className="flex items-center gap-1">
                     🏢 {notification.taxes.charging_stations.station_name}
                   </span>
+                )}
+                {notification.notification_type === "station_schedule" && notification.station_id && stationsMap[notification.station_id] && (
+                  <>
+                    <span className="flex items-center gap-1">
+                      🏢 {stationsMap[notification.station_id].station_name}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      ⏳ 생성 후 {Math.max(0, Math.floor((Date.now() - new Date(stationsMap[notification.station_id].created_at).getTime()) / (1000 * 60 * 60 * 24)))}일 경과
+                    </span>
+                  </>
                 )}
               </div>
             </div>
@@ -810,6 +834,18 @@ export function NotificationsClient() {
 
       if (taxesData) {
         setTaxes(taxesData)
+      }
+
+      // 충전소 기본 정보 맵 재생성
+      const { data: stationBasics } = await supabase
+        .from("charging_stations")
+        .select("id, station_name, created_at")
+      if (stationBasics) {
+        const map: Record<string, { station_name: string; created_at: string }> = {}
+        stationBasics.forEach((s: any) => {
+          map[s.id] = { station_name: s.station_name, created_at: s.created_at }
+        })
+        setStationsMap(map)
       }
 
     } catch (error) {
@@ -1475,6 +1511,14 @@ export function NotificationsClient() {
                         <span className="text-muted-foreground">팀즈 채널: </span>
                         <span className="font-medium">
                           {teamsChannels.find(c => c.id === schedule.teams_channel_id)?.channel_name || '알 수 없음'}
+                        </span>
+                      </div>
+                    )}
+                    {schedule.notification_type === "station_schedule" && schedule.station_id && stationsMap[schedule.station_id] && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">충전소 정보: </span>
+                        <span className="font-medium">
+                          {stationsMap[schedule.station_id].station_name} (생성일: {new Date(stationsMap[schedule.station_id].created_at).toLocaleDateString("ko-KR")})
                         </span>
                       </div>
                     )}
