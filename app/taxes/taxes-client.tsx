@@ -933,15 +933,13 @@ export function TaxesClient() {
       // 납부 완료 시, 미래 예약 알림 자동 삭제
       if (newStatus === "payment_completed") {
         try {
-          const todayISO = new Date().toISOString().split('T')[0]
-          const { error: delErr } = await supabase
+          const { error: delErrAll } = await supabase
             .from('notifications')
             .delete()
             .eq('tax_id', taxId)
-            .gt('notification_date', todayISO)
-          if (delErr) console.warn('미래 알림 삭제 실패:', delErr.message)
+          if (delErrAll) console.warn('세금 관련 알림 전체 삭제 실패:', delErrAll.message)
         } catch (e) {
-          console.warn('미래 알림 삭제 중 오류:', e)
+          console.warn('세금 관련 알림 전체 삭제 중 오류:', e)
         }
       }
       toast({
