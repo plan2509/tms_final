@@ -197,156 +197,148 @@ export async function POST(req: NextRequest) {
     // Process station schedule notifications (only if there are active schedules)
     if (stationSchedules && stationSchedules.length > 0) {
       for (const sched of stationSchedules as any[]) {
-      // Find stations without schedules (missing dates)
-      const { data: allStations, error: stationsErr } = await supabase
-        .from("charging_stations")
-        .select(`
-          id,
-          station_name,
-          location,
-          address,
-          canopy_installed,
-          created_at
-        `)
-      if (stationsErr) throw stationsErr
+        // Find stations without schedules (missing dates)
+        const { data: allStations, error: stationsErr } = await supabase
+          .from("charging_stations")
+          .select(`
+            id,
+            station_name,
+            location,
+            address,
+            canopy_installed,
+            created_at
+          `)
+        if (stationsErr) throw stationsErr
 
-      const { data: existingSchedules, error: schedulesErr } = await supabase
-        .from("station_schedules")
-        .select("station_id, use_approval_enabled, use_approval_date, safety_inspection_date")
-      if (schedulesErr) throw schedulesErr
+        const { data: existingSchedules, error: schedulesErr } = await supabase
+          .from("station_schedules")
+          .select("station_id, use_approval_enabled, use_approval_date, safety_inspection_date")
+        if (schedulesErr) throw schedulesErr
 
-      // Find stations missing required dates
-      const missingUseApprovalStations = []
-      const missingSafetyInspectionStations = []
+        // Find stations missing required dates
+        const missingUseApprovalStations: any[] = []
+        const missingSafetyInspectionStations: any[] = []
 
-      for (const station of allStations || []) {
-        const existingSchedule = existingSchedules?.find(s => s.station_id === station.id)
-        
-        // Check if station was created more than 'days_before' days ago
-        const stationCreatedDate = new Date(station.created_at)
-        const daysSinceCreation = Math.floor((now.getTime() - stationCreatedDate.getTime()) / (1000 * 60 * 60 * 24))
-        
-        // Only check for missing dates if the station was created more than 'days_before' days ago
-        if (daysSinceCreation >= sched.days_before) {
-          // Check for missing use approval date (only for canopy stations)
-          if (station.canopy_installed) {
-            if (!existingSchedule || !existingSchedule.use_approval_enabled || !existingSchedule.use_approval_date) {
-              missingUseApprovalStations.push({
+        for (const station of allStations || []) {
+          const existingSchedule = existingSchedules?.find(s => s.station_id === station.id)
+          
+          // Check if station was created more than 'days_before' days ago
+          const stationCreatedDate = new Date(station.created_at)
+          const daysSinceCreation = Math.floor((now.getTime() - stationCreatedDate.getTime()) / (1000 * 60 * 60 * 24))
+          
+          // Only check for missing dates if the station was created more than 'days_before' days ago
+          if (daysSinceCreation >= sched.days_before) {
+            // Check for missing use approval date (only for canopy stations)
+            if (station.canopy_installed) {
+              if (!existingSchedule || !existingSchedule.use_approval_enabled || !existingSchedule.use_approval_date) {
+                missingUseApprovalStations.push({
+                  ...station,
+                  missing_days: daysSinceCreation
+                })
+              }
+            }
+            
+            // Check for missing safety inspection date (all stations)
+            if (!existingSchedule || !existingSchedule.safety_inspection_date) {
+              missingSafetyInspectionStations.push({
                 ...station,
                 missing_days: daysSinceCreation
               })
             }
           }
-          
-          // Check for missing safety inspection date (all stations)
-          if (!existingSchedule || !existingSchedule.safety_inspection_date) {
-            missingSafetyInspectionStations.push({
-              ...station,
-              missing_days: daysSinceCreation
-            })
+        }
+
+        // De-duplicate stations (if both dates missing)
+        const dedupMap = new Map<string, any>()
+        for (const s of missingUseApprovalStations) dedupMap.set(s.id, s)
+        for (const s of missingSafetyInspectionStations) dedupMap.set(s.id, s)
+        const missingStations = Array.from(dedupMap.values())
+
+        if (missingStations.length === 0) continue
+
+        for (const s of missingStations) {
+          const msg = [
+            `${s.station_name} 사용 승인일 미입력 상태입니다.`,
+            `날짜를 입력해 주세요.`,
+            `https://tms.watercharging.com/`
+          ].join("\n")
+
+          // idempotent per station+schedule+date
+          const { data: existing } = await supabase
+            .from("notifications")
+            .select("id")
+            .eq("notification_type", "station_schedule")
+            .eq("schedule_id", sched.id)
+            .eq("station_id", s.id)
+            .eq("notification_date", todayKst)
+            .limit(1)
+            .maybeSingle()
+
+          let newNotification: any = existing
+          let notificationError: any = null
+          if (!existing) {
+            const insertRes = await supabase
+              .from("notifications")
+              .insert([{
+                notification_type: "station_schedule",
+                schedule_id: sched.id,
+                station_id: s.id,
+                notification_date: todayKst,
+                notification_time: "10:00",
+                message: msg,
+                teams_channel_id: sched.teams_channel_id,
+                is_sent: false
+              }])
+              .select()
+              .single()
+            newNotification = insertRes.data
+            notificationError = insertRes.error
+          } else {
+            // 기존 레코드도 메시지 포맷을 최신으로 동기화
+            await supabase
+              .from("notifications")
+              .update({ message: msg })
+              .eq("id", existing.id)
           }
+
+          if (notificationError) {
+            console.error(`[Station Schedule Notification] Failed to create notification:`, notificationError)
+            continue
+          }
+
+          // Send teams to selected channel or all
+          const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
+          const targets = targetWebhook ? [targetWebhook] : webhooksAll
+          let sendSuccess = true
+          
+          if (targets.length > 0) {
+            const sendResults = await Promise.allSettled(
+              targets.map((url: string) =>
+                fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
+              ),
+            )
+            
+            // Check for failed sends
+            const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
+            if (failedSends.length > 0) {
+              console.error(`[Station Schedule Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
+              sendSuccess = false
+            }
+          }
+
+          // Update notification status
+          await supabase
+            .from("notifications")
+            .update({ 
+              is_sent: sendSuccess, 
+              sent_at: sendSuccess ? new Date().toISOString() : null,
+              error_message: sendSuccess ? null : "Teams 발송 실패",
+              last_attempt_at: new Date().toISOString()
+            })
+            .eq("id", newNotification.id)
+
+          dispatchedStation += 1
         }
-      }
-
-      // Only send notification if there are missing dates
-      if (missingUseApprovalStations.length === 0 && missingSafetyInspectionStations.length === 0) {
-        continue
-      }
-
-      let msg = ``
-
-      // If exactly one missing station, send single-station message per requirement
-      const missingStations = [...missingUseApprovalStations, ...missingSafetyInspectionStations]
-      if (missingStations.length === 1) {
-        const s = missingStations[0]
-        msg = [
-          `${s.station_name} 사용 승인일 미입력 상태입니다.`,
-          `날짜를 입력해 주세요.`,
-          `https://tms.watercharging.com/`
-        ].join("\n")
-      } else {
-        // Fallback: summarize many
-        msg = [
-          `사용 승인일/안전 점검일 미입력 충전소 ${missingStations.length}곳`,
-          `날짜를 입력해 주세요.`,
-          `https://tms.watercharging.com/`
-        ].join("\n")
-      }
-
-      // Create notification in database
-      // idempotent: avoid duplicates for same schedule/date
-      const { data: existing } = await supabase
-        .from("notifications")
-        .select("id")
-        .eq("notification_type", "station_schedule")
-        .eq("schedule_id", sched.id)
-        .eq("notification_date", todayKst)
-        .limit(1)
-        .maybeSingle()
-
-      let newNotification: any = existing
-      let notificationError: any = null
-      if (!existing) {
-        const insertRes = await supabase
-          .from("notifications")
-          .insert([{
-            notification_type: "station_schedule",
-            schedule_id: sched.id,
-            notification_date: todayKst,
-            notification_time: "10:00",
-            message: msg,
-            teams_channel_id: sched.teams_channel_id,
-            is_sent: false
-          }])
-          .select()
-          .single()
-        newNotification = insertRes.data
-        notificationError = insertRes.error
-      } else {
-        // 기존 레코드도 메시지 포맷을 최신으로 동기화
-        await supabase
-          .from("notifications")
-          .update({ message: msg })
-          .eq("id", existing.id)
-      }
-
-      if (notificationError) {
-        console.error(`[Station Schedule Notification] Failed to create notification:`, notificationError)
-        continue
-      }
-
-      // Send teams to selected channel or all
-      const targetWebhook = sched.teams_channel_id ? idToWebhook.get(sched.teams_channel_id) : null
-      const targets = targetWebhook ? [targetWebhook] : webhooksAll
-      let sendSuccess = true
-      
-      if (targets.length > 0) {
-        const sendResults = await Promise.allSettled(
-          targets.map((url: string) =>
-            fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
-          ),
-        )
-        
-        // Check for failed sends
-        const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
-        if (failedSends.length > 0) {
-          console.error(`[Station Schedule Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
-          sendSuccess = false
-        }
-      }
-
-      // Update notification status
-      await supabase
-        .from("notifications")
-        .update({ 
-          is_sent: sendSuccess, 
-          sent_at: sendSuccess ? new Date().toISOString() : null,
-          error_message: sendSuccess ? null : "Teams 발송 실패",
-          last_attempt_at: new Date().toISOString()
-        })
-        .eq("id", newNotification.id)
-
-      dispatchedStation += missingUseApprovalStations.length + missingSafetyInspectionStations.length
       }
     }
 
