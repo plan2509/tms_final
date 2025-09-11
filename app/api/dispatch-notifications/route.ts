@@ -420,3 +420,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Vercel Cron 및 수동 호출용 GET 지원
+export async function GET(req: NextRequest) {
+  return POST(req)
+}
+
