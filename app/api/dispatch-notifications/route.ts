@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export async function POST(req: NextRequest) {
   try {
+    // Allow authenticated admin users to invoke without CRON secret (for in-app "스케줄 즉시 실행")
+    let isAdminCaller = false
+    try {
+      const supabaseAuth = await createServerClient()
+      const {
+        data: { user },
+      } = await supabaseAuth.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabaseAuth.from("users").select("role").eq("id", user.id).single()
+        if (profile?.role === "admin") isAdminCaller = true
+      }
+    } catch {}
+
     // Optional protection for external schedulers (AWS/EventBridge, etc.)
     const cronSecret = process.env.CRON_SECRET
-    if (cronSecret) {
+    if (cronSecret && !isAdminCaller) {
       const url = new URL(req.url)
       const provided = req.headers.get("x-cron-key") || url.searchParams.get("key")
       if (provided !== cronSecret) {

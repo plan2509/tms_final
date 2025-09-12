@@ -687,22 +687,20 @@ export function NotificationsClient() {
     setIsActionLoading(true)
 
     try {
-      // Call the database function to generate reminders
-      const { error } = await supabase.rpc("generate_tax_reminders")
-
-      if (error) {
-        console.error("Error generating reminders:", error)
+      const res = await fetch("/api/generate-tax-reminders", { method: "POST" })
+      const json = await res.json()
+      if (!res.ok || !json?.success) {
+        console.error("Error generating reminders:", json?.error || res.statusText)
         toast({
           title: "오류",
           description: "자동 리마인더 생성 중 오류가 발생했습니다.",
           variant: "destructive",
         })
       } else {
-        // Refresh notifications list
         await fetchData()
         toast({
           title: "성공",
-          description: "세금 리마인더가 자동으로 생성되었습니다.",
+          description: `세금 리마인더 생성 완료 (신규 ${json.created}건, 건너뜀 ${json.skipped}건)`,
         })
       }
     } catch (error) {
