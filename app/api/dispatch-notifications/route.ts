@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     if (notificationType === "tax") {
       const { data: taxSched, error: taxSchedErr } = await supabase
         .from("notification_schedules")
-        .select("id, days_before, notification_time, is_active, teams_channel_id")
+        .select("id, name, days_before, notification_time, is_active, teams_channel_id")
         .eq("notification_type", "tax")
         .eq("is_active", true)
       if (taxSchedErr) throw taxSchedErr
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     } else if (notificationType === "station_schedule") {
       const { data: stationSched, error: stationSchedErr } = await supabase
         .from("notification_schedules")
-        .select("id, days_before, notification_time, is_active, teams_channel_id")
+        .select("id, name, days_before, notification_time, is_active, teams_channel_id")
         .eq("notification_type", "station_schedule")
         .eq("is_active", true)
       if (stationSchedErr) throw stationSchedErr
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       // 파라미터가 없으면 세금 알림만 처리 (AWS cron job용)
       const { data: taxSched, error: taxSchedErr } = await supabase
         .from("notification_schedules")
-        .select("id, days_before, notification_time, is_active, teams_channel_id")
+        .select("id, name, days_before, notification_time, is_active, teams_channel_id")
         .eq("notification_type", "tax")
         .eq("is_active", true)
       if (taxSchedErr) throw taxSchedErr
@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
                 tax_id: tax.id,
                 notification_date: todayKst,
                 notification_time: "10:00",
+                title: (sched as any).name || '알림',
                 message: msg,
                 teams_channel_id: sched.teams_channel_id,
                 is_sent: false
@@ -299,6 +300,7 @@ export async function POST(req: NextRequest) {
                   station_missing_type: missingType,
                   notification_date: todayKst,
                   notification_time: "10:00",
+                  title: (sched as any).name || '알림',
                   message: msg,
                   teams_channel_id: sched.teams_channel_id,
                   is_sent: false
