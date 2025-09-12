@@ -217,7 +217,7 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <TaxReminderSystem />
+      {process.env.NEXT_PUBLIC_ENABLE_TAX_ALERTS === "1" && <TaxReminderSystem />}
 
       <div className="w-64 bg-black border-r border-border flex flex-col">
         <div className="p-6 bg-neutral-900">
