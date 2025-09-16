@@ -230,8 +230,9 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
         <nav className="flex-1 px-4 space-y-1 bg-neutral-900">
           {(() => {
             const allowedForBD = new Set(["/dashboard", "/stations", "/station-schedules", "/statistics", "/settings"])
-            const visibleNavigation =
-              user?.role === "business_development" ? textNavigation.filter((i) => allowedForBD.has(i.href)) : textNavigation
+            const visibleNavigation = user?.role === "business_development"
+              ? textNavigation.filter((i) => allowedForBD.has(i.href))
+              : textNavigation
             return visibleNavigation.map((item) => {
               const isActive = pathname === item.href
               return (
