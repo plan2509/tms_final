@@ -245,34 +245,10 @@ export function StationsClient() {
       })
     } else {
       setStations([data, ...stations])
-      
-      // 충전소 생성 성공 - 사업 일정 카드 자동 생성 및 미입력 알림 생성
+
+      // 충전소 생성 성공 (일정/알림 생성은 DB 트리거에서 처리)
       console.log("=== 충전소 생성 성공 ===")
       console.log("충전소 데이터:", data)
-      
-      try {
-        // 1. 사업 일정 카드 생성
-        const scheduleData: any = {
-          station_id: data.id,
-          use_approval_enabled: data.canopy_installed || false,
-          use_approval_date: null,
-          safety_inspection_date: null,
-        }
-
-        const { error: scheduleErr } = await supabase
-          .from('station_schedules')
-          .insert([scheduleData])
-
-        if (scheduleErr) {
-          console.warn('사업 일정 카드 생성 실패:', scheduleErr.message)
-        } else {
-          console.log('사업 일정 카드 생성 완료')
-        }
-
-        // 2. (중복 방지) 알림 생성은 DB 트리거/스케줄러에서만 처리
-      } catch (error) {
-        console.error('충전소 생성 후처리 오류:', error)
-      }
       
       // audit log: create station
       logAudit({
