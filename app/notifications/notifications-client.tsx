@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 interface Notification {
   id: string
   tax_id: string | null
-  notification_type: "auto" | "manual"
+  notification_type: string
   schedule_id: string | null
   notification_date: string
   notification_time: string
@@ -66,6 +66,7 @@ interface Schedule {
   is_active: boolean
   notification_type?: string
   teams_channel_id?: string | null
+  station_id?: string | null
 }
 
 interface Tax {
@@ -1250,7 +1251,6 @@ export function NotificationsClient() {
                     if (!name) return
                     const daysStr = prompt("세금 납부일 기준 며칠 전 알림(정수)", "3") || "3"
                     const days = Number(daysStr)
-                    const time = "10:00" // 매일 오전 10시로 고정
                     
                     // 팀즈 채널 선택
                     let teamsChannelId = null
@@ -1269,7 +1269,6 @@ export function NotificationsClient() {
                         .insert([{ 
                           name: name, 
                           days_before: days, 
-                          notification_time: time, 
                           notification_type: "tax",
                           teams_channel_id: teamsChannelId,
                           is_active: true 
@@ -1297,7 +1296,6 @@ export function NotificationsClient() {
                     if (!name) return
                     const daysStr = prompt("충전소 생성 후 며칠이 지났을 때 미입력 알림을 보낼지 설정하세요 (정수)\n\n예시:\n• 7: 충전소 생성 후 7일 경과 시 미입력 알림\n• 15: 충전소 생성 후 15일 경과 시 미입력 알림\n• 30: 충전소 생성 후 30일 경과 시 미입력 알림\n\n미입력 대상:\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시", "7") || "7"
                     const days = Number(daysStr)
-                    const time = "10:00" // 매일 오전 10시로 고정
                     
                     // 팀즈 채널 선택
                     let teamsChannelId = null
@@ -1316,7 +1314,6 @@ export function NotificationsClient() {
                         .insert([{ 
                           name: name, 
                           days_before: days, 
-                          notification_time: time, 
                           notification_type: "station_schedule",
                           teams_channel_id: teamsChannelId,
                           is_active: true 
@@ -1408,7 +1405,6 @@ export function NotificationsClient() {
                               ? "세금 납부일 기준 며칠 전 알림(정수)"
                               : "충전소 생성 후 며칠이 지났을 때 미입력 알림을 보낼지 설정하세요 (정수)\n\n예시:\n• 7: 충전소 생성 후 7일 경과 시 미입력 알림\n• 15: 충전소 생성 후 15일 경과 시 미입력 알림\n• 30: 충전소 생성 후 30일 경과 시 미입력 알림\n\n미입력 대상:\n• 사용 승인일: 캐노피 설치된 충전소 중 미입력 시\n• 안전 점검일: 모든 충전소 중 미입력 시"
                             const days = Number(prompt(promptText, String(schedule.days_before)) || schedule.days_before)
-                            const time = "10:00" // 매일 오전 10시로 고정
                             
                             // 팀즈 채널 선택
                             let teamsChannelId = schedule.teams_channel_id
@@ -1426,7 +1422,7 @@ export function NotificationsClient() {
                             try {
                               const { error } = await supabase
                                 .from("notification_schedules")
-                                .update({ name: name, days_before: days, notification_time: time, teams_channel_id: teamsChannelId })
+                                .update({ name: name, days_before: days, teams_channel_id: teamsChannelId })
                                 .eq("id", schedule.id)
                               if (error) throw error
                               // refresh
@@ -1485,10 +1481,7 @@ export function NotificationsClient() {
                       <span className="text-muted-foreground">알림 시점: </span>
                       <span className="font-medium">{schedule.days_before}일 전</span>
                     </div>
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">알림 시간: </span>
-                      <span className="font-medium">{schedule.notification_time}</span>
-                    </div>
+                    
                     {schedule.teams_channel_id && (
                       <div className="text-sm">
                         <span className="text-muted-foreground">팀즈 채널: </span>
