@@ -228,23 +228,28 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
         </div>
 
         <nav className="flex-1 px-4 space-y-1 bg-neutral-900">
-          {textNavigation.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  "block px-4 py-3 font-medium transition-colors text-base leading-8 tracking-normal h-auto rounded-xl",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-              >
-                {item.name}
-              </Link>
-            )
-          })}
+          {(() => {
+            const allowedForBD = new Set(["/dashboard", "/stations", "/station-schedules", "/statistics", "/settings"])
+            const visibleNavigation =
+              user?.role === "business_development" ? textNavigation.filter((i) => allowedForBD.has(i.href)) : textNavigation
+            return visibleNavigation.map((item) => {
+              const isActive = pathname === item.href
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    "block px-4 py-3 font-medium transition-colors text-base leading-8 tracking-normal h-auto rounded-xl",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  {item.name}
+                </Link>
+              )
+            })
+          })()}
           {user?.role === "admin" && (
             <Link
               href="/audit-logs"
