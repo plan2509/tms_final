@@ -201,7 +201,13 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
                   alt="logo"
                   className="h-6 w-auto"
                   onError={(e) => {
-                    ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                    const img = e.currentTarget as HTMLImageElement
+                    if (!img.dataset.fallback) {
+                      img.dataset.fallback = "1"
+                      img.src = "/water%20CI_symbol_white.png"
+                    } else {
+                      img.style.display = "none"
+                    }
                   }}
                 />
                 <div className="text-3xl font-black text-primary">TMS</div>
@@ -234,7 +240,13 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
               alt="logo"
               className="h-6 w-auto"
               onError={(e) => {
-                ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                const img = e.currentTarget as HTMLImageElement
+                if (!img.dataset.fallback) {
+                  img.dataset.fallback = "1"
+                  img.src = "/water%20CI_symbol_white.png"
+                } else {
+                  img.style.display = "none"
+                }
               }}
             />
             <div className="text-3xl font-black italic text-slate-400">TMS</div>
@@ -290,7 +302,13 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
               alt="Water"
               className="h-4 w-auto opacity-80"
               onError={(e) => {
-                ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                const img = e.currentTarget as HTMLImageElement
+                if (!img.dataset.fallback) {
+                  img.dataset.fallback = "1"
+                  img.src = "/water%20CI_symbol_white.png"
+                } else {
+                  img.style.display = "none"
+                }
               }}
             />
             <span>made by water 2025</span>
