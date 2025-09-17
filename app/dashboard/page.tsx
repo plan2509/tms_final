@@ -223,20 +223,17 @@ export default function DashboardPage() {
         body: JSON.stringify({ taxData: analysisData }),
       })
 
-      if (!res.ok) {
-        const errorText = await res.text()
-        console.error("[v0] Dashboard: API error:", res.status, errorText)
-        throw new Error(`API Error: ${res.status} - ${errorText}`)
-      }
-
-      const result = await res.json()
-      setAiAnalysis(result.analysis)
+      let text = "서비스를 준비 중입니다"
+      try {
+        const result = await res.json()
+        if (result?.analysis) text = result.analysis
+      } catch {}
+      setAiAnalysis(text)
 
       console.log("[v0] Dashboard: Analysis completed")
     } catch (error) {
       console.error("[v0] Dashboard: Error generating tax insights:", error)
-      const errorMessage = error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다"
-      setAiAnalysis(`AI 분석 중 오류가 발생했습니다: ${errorMessage}\n\n다시 시도해주세요.`)
+      setAiAnalysis("서비스를 준비 중입니다")
     } finally {
       setIsAnalyzing(false)
     }

@@ -9,12 +9,16 @@ export async function POST(request: NextRequest) {
 
     if (!taxData) {
       console.log("[Gemini] AI Analysis: No tax data provided")
-      return new Response("Tax data is required", { status: 400 })
+      return new Response(JSON.stringify({ analysis: "서비스를 준비 중입니다" }), {
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
     if (!process.env.GOOGLE_AI_API_KEY) {
       console.error("[Gemini] AI Analysis: GOOGLE_AI_API_KEY not found")
-      return new Response("AI service not configured", { status: 500 })
+      return new Response(JSON.stringify({ analysis: "서비스를 준비 중입니다" }), {
+        headers: { "Content-Type": "application/json" },
+      })
     }
 
     console.log("[Gemini] AI Analysis: Calling Gemini AI")
@@ -37,15 +41,8 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("[Gemini] AI Analysis: Error analyzing tax insights:", error)
-    return new Response(
-      JSON.stringify({
-        error: "Failed to analyze tax data",
-        details: error instanceof Error ? error.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      },
-    )
+    return new Response(JSON.stringify({ analysis: "서비스를 준비 중입니다" }), {
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }

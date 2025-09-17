@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return Response.json({
         success: true,
         data: {
-          extracted_text: "AI 서비스가 설정되지 않았습니다.",
+          extracted_text: "서비스를 준비 중입니다",
           text_sections: [],
         },
       })
@@ -97,7 +97,7 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`
       return Response.json({
         success: true,
         data: {
-          extracted_text: "AI 서비스에 연결할 수 없습니다.",
+          extracted_text: "서비스를 준비 중입니다",
           text_sections: [],
         },
       })
@@ -108,7 +108,7 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`
       return Response.json({
         success: true,
         data: {
-          extracted_text: "AI가 응답을 생성하지 못했습니다.",
+          extracted_text: "서비스를 준비 중입니다",
           text_sections: [],
         },
       })
@@ -224,13 +224,13 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`
       return Response.json({
         success: true,
         data: {
-          extracted_text: "AI 분석 결과를 파싱할 수 없습니다.",
+          extracted_text: "서비스를 준비 중입니다",
           text_sections: [],
         },
       })
     }
   } catch (error) {
     console.error("[Gemini] Error analyzing tax image:", error)
-    return Response.json({ success: false, error: "이미지 분석 중 오류가 발생했습니다." }, { status: 500 })
+    return Response.json({ success: true, data: { extracted_text: "서비스를 준비 중입니다", text_sections: [] } }, { status: 200 })
   }
 }

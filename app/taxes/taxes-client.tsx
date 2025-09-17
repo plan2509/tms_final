@@ -471,7 +471,7 @@ export function TaxesClient() {
                 taxType = 'acquisition'
               } else if (str.includes('재산') || str.includes('property')) {
                 taxType = 'property'
-              } else if (str.includes('지방') || str.includes('local')) {
+              } else if (str.includes('지았을 때때방') || str.includes('local')) {
                 taxType = 'other'
               } else {
                 taxType = 'other'
@@ -596,31 +596,16 @@ export function TaxesClient() {
       clearInterval(progressInterval)
       setAnalysisProgress(100)
 
-      const result = await response.json()
-
-      if (result.success && result.data) {
-        setExtractedText(result.data.extracted_text || '')
-        setDisplayedSections(result.data.text_sections || [])
-        setIsShowingResults(true)
-        
-        toast({
-          title: "AI 분석 완료",
-          description: "이미지에서 텍스트를 성공적으로 추출했습니다.",
-        })
-      } else {
-        toast({
-          title: "분석 실패",
-          description: result.error || "이미지 분석 중 오류가 발생했습니다.",
-          variant: "destructive",
-        })
-      }
+      let result: any = null
+      try { result = await response.json() } catch {}
+      const data = result?.data || { extracted_text: "서비스를 준비 중입니다", text_sections: [] }
+      setExtractedText(data.extracted_text || "서비스를 준비 중입니다")
+      setDisplayedSections(data.text_sections || [])
+      setIsShowingResults(true)
+      toast({ title: "안내", description: "서비스를 준비 중입니다" })
     } catch (error) {
       console.error('AI 분석 오류:', error)
-      toast({
-        title: "분석 오류",
-        description: "AI 서비스에 연결할 수 없습니다.",
-        variant: "destructive",
-      })
+      toast({ title: "안내", description: "서비스를 준비 중입니다" })
     } finally {
       setIsAnalyzing(false)
       setAnalysisProgress(0)

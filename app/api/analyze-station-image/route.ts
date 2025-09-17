@@ -7,12 +7,12 @@ export async function POST(request: NextRequest) {
     const image = formData.get("image") as File
 
     if (!image) {
-      return NextResponse.json({ success: false, error: "이미지가 제공되지 않았습니다." }, { status: 400 })
+      return NextResponse.json({ success: false, error: "서비스를 준비 중입니다" }, { status: 200 })
     }
 
     if (!process.env.GOOGLE_AI_API_KEY) {
       console.error("[Gemini] GOOGLE_AI_API_KEY not found")
-      return NextResponse.json({ success: false, error: "AI 서비스가 설정되지 않았습니다." }, { status: 500 })
+      return NextResponse.json({ success: true, data: { station_name: "", location: "", address: "", status: "operating" } })
     }
 
     // Convert image to base64
@@ -81,10 +81,13 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`
     } catch {}
     return NextResponse.json(
       {
-        success: false,
-        error: error instanceof Error ? error.message : "이미지 분석 중 오류가 발생했습니다.",
+        success: true,
+        data: {
+          extracted_text: "서비스를 준비 중입니다",
+          text_sections: [],
+        },
       },
-      { status: 500 },
+      { status: 200 },
     )
   }
 }
