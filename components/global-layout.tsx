@@ -196,6 +196,14 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <Link href="/" className="flex items-center space-x-3">
+                <img
+                  src="/logo-small.png"
+                  alt="logo"
+                  className="h-6 w-auto"
+                  onError={(e) => {
+                    ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                  }}
+                />
                 <div className="text-3xl font-black text-primary">TMS</div>
               </Link>
             </div>
@@ -221,6 +229,14 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
       <div className="w-64 bg-black border-r border-border flex flex-col">
         <div className="p-6 bg-neutral-900">
           <Link href="/dashboard" className="flex items-center space-x-3">
+            <img
+              src="/logo-small.png"
+              alt="logo"
+              className="h-6 w-auto"
+              onError={(e) => {
+                ;(e.currentTarget as HTMLImageElement).style.display = "none"
+              }}
+            />
             <div className="text-3xl font-black italic text-slate-400">TMS</div>
           </Link>
         </div>
@@ -268,12 +284,17 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
           <Button variant="ghost" size="sm" onClick={() => handleSignOut(router)} className="w-full justify-start">
             로그아웃
           </Button>
-          {false && (
-            <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
-              <img src="/logo-small.png" alt="Water" className="h-4 w-auto opacity-80" />
-              <span>made by water 2025</span>
-            </div>
-          )}
+          <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <img
+              src="/logo-small.png"
+              alt="Water"
+              className="h-4 w-auto opacity-80"
+              onError={(e) => {
+                ;(e.currentTarget as HTMLImageElement).style.display = "none"
+              }}
+            />
+            <span>made by water 2025</span>
+          </div>
         </div>
       </div>
 
