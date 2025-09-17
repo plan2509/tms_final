@@ -26,8 +26,11 @@ export const metadata: Metadata = {
   description: "충전소 세무 일정을 체계적으로 관리하는 시스템",
   generator: "v0.app",
   icons: {
-    icon: "/water%20CI_symbol_full%20color.png",
-    shortcut: "/water%20CI_symbol_full%20color.png",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/water%20CI_symbol_full%20color.png", type: "image/png", sizes: "any" },
+    ],
+    shortcut: "/favicon.svg",
     apple: "/water%20CI_symbol_full%20color.png",
   },
 }

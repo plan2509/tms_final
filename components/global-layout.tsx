@@ -210,7 +210,7 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
                     }
                   }}
                 />
-                <div className="text-3xl font-black text-primary">TMS</div>
+                <div className="text-3xl font-black text-white">TMS</div>
               </Link>
             </div>
           </div>
@@ -249,7 +249,8 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
                 }
               }}
             />
-            <div className="text-3xl font-black italic text-slate-400">TMS</div>
+            <div className="text-3xl font-black text-white">TMS</div>
+            <div className="text-3xl font-black text-white">TMS</div>
           </Link>
         </div>
 
