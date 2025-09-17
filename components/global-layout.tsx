@@ -272,7 +272,7 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
           </Button>
           <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
             <img src="/logo-small.png" alt="Water" className="h-4 w-auto opacity-80" />
-            <span>made by water</span>
+            <span>made by water 2025</span>
           </div>
         </div>
       </div>
