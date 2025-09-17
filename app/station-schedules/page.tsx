@@ -50,6 +50,7 @@ export default function StationSchedulesPage() {
 
   const supabase = createClient()
   const isAdmin = userRole === "admin"
+  const canEdit = userRole === "admin" || userRole === "business_development"
 
   useEffect(() => {
     fetchData()
@@ -88,40 +89,33 @@ export default function StationSchedulesPage() {
       if (stationsData) {
         const cards: ScheduleCard[] = []
 
-        // 오늘 날짜 기준으로 신규 충전소 구분 (예: 최근 7일 이내)
-        const today = new Date()
-        const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-
         stationsData.forEach(station => {
           const existingSchedule = schedulesData?.find(s => s.station_id === station.id)
-          const stationCreatedAt = new Date(station.created_at)
-          
-          // 신규 충전소: 최근 7일 이내에 생성된 경우
-          const isNewStation = stationCreatedAt > sevenDaysAgo
-          
-          if (isNewStation) {
-            // 사용 승인일 카드 (캐노피 설치된 경우에만)
-            if (station.canopy_installed) {
-              const hasUseApproval = existingSchedule?.use_approval_enabled && existingSchedule?.use_approval_date
-              cards.push({
-                id: `${station.id}-use_approval`,
-                station,
-                type: 'use_approval',
-                date: existingSchedule?.use_approval_date || null,
-                completed: hasUseApproval // 사용 승인일이 입력된 경우에만 완료
-              })
-            }
 
-            // 안전 점검일 카드 (모든 충전소)
-            const hasSafetyInspection = !!existingSchedule?.safety_inspection_date
+          // 스케줄 행이 있는 충전소만 카드 노출 (DB에서 지우면 화면에서도 사라짐)
+          if (!existingSchedule) return
+
+          // 사용 승인일 카드 (캐노피 설치된 경우에만)
+          if (station.canopy_installed) {
+            const hasUseApproval = !!(existingSchedule.use_approval_enabled && existingSchedule.use_approval_date)
             cards.push({
-              id: `${station.id}-safety_inspection`,
+              id: `${station.id}-use_approval`,
               station,
-              type: 'safety_inspection',
-              date: existingSchedule?.safety_inspection_date || null,
-              completed: hasSafetyInspection // 안전 점검일이 입력된 경우에만 완료
+              type: 'use_approval',
+              date: existingSchedule.use_approval_date || null,
+              completed: hasUseApproval
             })
           }
+
+          // 안전 점검일 카드 (모든 충전소)
+          const hasSafetyInspection = !!existingSchedule.safety_inspection_date
+          cards.push({
+            id: `${station.id}-safety_inspection`,
+            station,
+            type: 'safety_inspection',
+            date: existingSchedule.safety_inspection_date || null,
+            completed: hasSafetyInspection
+          })
         })
 
         // 완료되지 않은 카드만 표시
@@ -158,7 +152,7 @@ export default function StationSchedulesPage() {
   }
 
   const handleSaveCard = async (card: ScheduleCard) => {
-    if (!isAdmin) return
+    if (!canEdit) return
 
     // 날짜 입력 유효성 검사
     if (!card.date || card.date.trim() === '') {
@@ -327,7 +321,7 @@ export default function StationSchedulesPage() {
                     type="date"
                     value={card.date || ""}
                     onChange={(e) => handleDateChange(card.id, e.target.value)}
-                    disabled={!isAdmin}
+                    disabled={!canEdit}
                     className="text-sm"
                     placeholder="날짜를 선택하세요"
                     required
@@ -345,7 +339,7 @@ export default function StationSchedulesPage() {
                 <div className="pt-2">
                   <Button 
                     onClick={() => handleSaveCard(card)}
-                    disabled={!isAdmin || !card.date || savingCardId === card.id}
+                    disabled={!canEdit || !card.date || savingCardId === card.id}
                     className="w-full gap-2"
                   >
                     <Save className="h-4 w-4" />
