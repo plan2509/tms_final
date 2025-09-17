@@ -1,0 +1,31 @@
+name: Dispatch Notifications (Daily)
+
+on:
+  schedule:
+    # Run at 01:00 UTC every day (KST 10:00)
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      type:
+        description: 'Notification type (optional: tax | station_schedule)'
+        required: false
+        default: tax
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call dispatch-notifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://tms.watercharging.com/api/dispatch-notifications"
+          if [ -n "${{ github.event.inputs.type || '' }}" ]; then
+            URL="$URL?type=${{ github.event.inputs.type }}"
+          fi
+          if [ -n "${{ secrets.CRON_SECRET || '' }}" ]; then
+            curl -sS -X POST -H "x-cron-key: ${{ secrets.CRON_SECRET }}" "$URL" | jq -r '.' || exit 1
+          else
+            curl -sS -X POST "$URL" | jq -r '.' || exit 1
+          fi
+
