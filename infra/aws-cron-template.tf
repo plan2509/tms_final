@@ -1,7 +1,7 @@
 # Terraform template to call Next API /api/dispatch-notifications via EventBridge + Lambda
 
 variable "region" { default = "ap-northeast-2" }
-variable "cron_secret" {}
+variable "cron_secret" { default = "" }
 variable "target_url" {} # e.g. https://your-domain.vercel.app/api/dispatch-notifications
 
 provider "aws" {
@@ -65,7 +65,7 @@ resource "aws_lambda_function" "dispatch" {
 
 resource "aws_cloudwatch_event_rule" "daily" {
   name                = "dispatch_notifications_daily"
-  schedule_expression = "cron(0 0 * * ? *)" # UTC 00:00; adjust as needed
+  schedule_expression = "cron(0 1 * * ? *)" # UTC 01:00 (KST 10:00)
 }
 
 resource "aws_cloudwatch_event_target" "lambda" {

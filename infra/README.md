@@ -7,7 +7,7 @@ This template triggers your Next API endpoint `/api/dispatch-notifications` on a
 
 ## Variables
 - `region`: AWS region (default `ap-northeast-2`)
-- `target_url`: e.g. `https://<your-domain>/api/dispatch-notifications`
+- `target_url`: e.g. `https://tms.watercharging.com/api/dispatch-notifications`
 - `cron_secret`: same as Vercel `CRON_SECRET`. Sent via header `x-cron-key`.
 
 ## Usage
@@ -16,7 +16,7 @@ This template triggers your Next API endpoint `/api/dispatch-notifications` on a
 cd infra
 # Set variables
 export TF_VAR_region=ap-northeast-2
-export TF_VAR_target_url=https://your-domain.vercel.app/api/dispatch-notifications
+export TF_VAR_target_url=https://tms.watercharging.com/api/dispatch-notifications
 export TF_VAR_cron_secret=YOUR_CRON_SECRET
 # Init & apply
 terraform init
