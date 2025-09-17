@@ -197,7 +197,6 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
             <div className="flex items-center justify-between h-16">
               <Link href="/" className="flex items-center space-x-3">
                 <div className="text-3xl font-black text-primary">TMS</div>
-                <div className="hidden sm:block text-sm font-medium text-muted-foreground">세무 관리 시스템</div>
               </Link>
             </div>
           </div>
@@ -223,7 +222,6 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
         <div className="p-6 bg-neutral-900">
           <Link href="/dashboard" className="flex items-center space-x-3">
             <div className="text-3xl font-black italic text-slate-400">TMS</div>
-            <div className="font-medium text-muted-foreground text-sm">세무 관리 시스템</div>
           </Link>
         </div>
 
@@ -270,10 +268,12 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
           <Button variant="ghost" size="sm" onClick={() => handleSignOut(router)} className="w-full justify-start">
             로그아웃
           </Button>
-          <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
-            <img src="/logo-small.png" alt="Water" className="h-4 w-auto opacity-80" />
-            <span>made by water 2025</span>
-          </div>
+          {false && (
+            <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
+              <img src="/logo-small.png" alt="Water" className="h-4 w-auto opacity-80" />
+              <span>made by water 2025</span>
+            </div>
+          )}
         </div>
       </div>
 
