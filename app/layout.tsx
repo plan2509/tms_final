@@ -22,9 +22,14 @@ const openSans = Open_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "TMS - 세금 일정 관리 시스템",
-  description: "충전소 세금 일정을 체계적으로 관리하는 시스템",
+  title: "TMS - 세무 관리 시스템",
+  description: "충전소 세무 일정을 체계적으로 관리하는 시스템",
   generator: "v0.app",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 }
 
 export default function RootLayout({
