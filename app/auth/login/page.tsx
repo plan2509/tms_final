@@ -69,7 +69,23 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-foreground mb-2">TMS</h1>
+            <div className="flex items-center justify-center gap-2">
+              <img
+                src="/logo-small.png"
+                alt="logo"
+                className="h-6 w-auto"
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement
+                  if (!(img as any).dataset.fallback) {
+                    ;(img as any).dataset.fallback = "1"
+                    img.src = "/water%20CI_symbol_white.png"
+                  } else {
+                    img.style.display = "none"
+                  }
+                }}
+              />
+              <h1 className="text-3xl font-bold text-white mb-2">TMS</h1>
+            </div>
           </div>
           <Card>
             <CardHeader>
@@ -125,6 +141,24 @@ export default function LoginPage() {
                   </div>
                 </div>
               </form>
+
+              <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+                <img
+                  src="/logo-small.png"
+                  alt="Water"
+                  className="h-4 w-auto opacity-80"
+                  onError={(e) => {
+                    const img = e.currentTarget as HTMLImageElement
+                    if (!(img as any).dataset.fallback) {
+                      ;(img as any).dataset.fallback = "1"
+                      img.src = "/water%20CI_symbol_white.png"
+                    } else {
+                      img.style.display = "none"
+                    }
+                  }}
+                />
+                <span>made by water</span>
+              </div>
             </CardContent>
           </Card>
         </div>
