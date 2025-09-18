@@ -250,7 +250,6 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
               }}
             />
             <div className="text-3xl font-black text-white">TMS</div>
-            <div className="text-3xl font-black text-white">TMS</div>
           </Link>
         </div>
 
