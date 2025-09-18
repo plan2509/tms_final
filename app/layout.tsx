@@ -27,11 +27,10 @@ export const metadata: Metadata = {
   generator: "v0.app",
   icons: {
     icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/water%20CI_symbol_full%20color.png", type: "image/png", sizes: "any" },
+      { url: "/favicon_180x180.png", type: "image/png", sizes: "180x180" },
     ],
-    shortcut: "/favicon.svg",
-    apple: "/water%20CI_symbol_full%20color.png",
+    shortcut: "/favicon_180x180.png",
+    apple: "/favicon_180x180.png",
   },
 }
 
