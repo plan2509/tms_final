@@ -5,7 +5,9 @@ export async function POST(req: NextRequest) {
   try {
     // Optional protection for external schedulers (AWS/EventBridge, etc.)
     const cronSecret = process.env.CRON_SECRET
-    if (cronSecret) {
+    // Allow Vercel Cron (adds x-vercel-cron: 1) even when CRON_SECRET is set
+    const isVercelCron = req.headers.get("x-vercel-cron") === "1"
+    if (cronSecret && !isVercelCron) {
       const url = new URL(req.url)
       const provided = req.headers.get("x-cron-key") || url.searchParams.get("key")
       if (provided !== cronSecret) {
