@@ -15,6 +15,8 @@ import { useRouter } from "next/navigation"
 import { toast } from "@/hooks/use-toast"
 import { Clock, AlertTriangle, Plus, Search } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 
 interface Notification {
   id: string
@@ -99,7 +101,7 @@ export function NotificationsClient() {
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [filterType, setFilterType] = useState<string>("all")
   const [searchTerm, setSearchTerm] = useState<string>("")
-  const [sortBy, setSortBy] = useState<string>("date-desc")
+  const [sortBy, setSortBy] = useState<string>("upcoming")
   const [isCreateNotificationOpen, setIsCreateNotificationOpen] = useState(false)
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false)
   const [editingNotification, setEditingNotification] = useState<Notification | null>(null)
@@ -107,6 +109,8 @@ export function NotificationsClient() {
   const router = useRouter()
   const supabase = createClient()
   const [stationsMap, setStationsMap] = useState<Record<string, { station_name: string; created_at: string }>>({})
+  const [page, setPage] = useState<number>(1)
+  const PAGE_SIZE = 10
 
   useEffect(() => {
     const fetchData = async () => {
@@ -133,9 +137,28 @@ export function NotificationsClient() {
           .order("notification_date", { ascending: false })
         if (notifErr) console.warn("[v0] Notifications fetch error:", notifErr)
 
-        if (notificationsData) {
-          setNotifications(notificationsData)
-        }
+        // Load manual notifications and merge
+        const { data: manualData } = await supabase
+          .from("manual_notifications")
+          .select("id, station_id, notification_date, message, is_sent, sent_at, created_at, updated_at, teams_channel_id")
+
+        const manualMapped = (manualData || []).map((m: any) => ({
+          id: m.id,
+          tax_id: null,
+          notification_type: "manual",
+          schedule_id: null,
+          notification_date: m.notification_date,
+          notification_time: "10:00",
+          message: m.message,
+          is_sent: m.is_sent,
+          sent_at: m.sent_at,
+          teams_channel_id: m.teams_channel_id,
+          created_at: m.created_at,
+          station_id: m.station_id,
+        }))
+
+        const combinedNotifications = [ ...(notificationsData || []), ...manualMapped ]
+        setNotifications(combinedNotifications)
 
         const { data: channelsData } = await supabase
           .from("teams_channels")
@@ -226,16 +249,29 @@ export function NotificationsClient() {
 
     // Sort notifications
     filtered.sort((a, b) => {
+      const getKey = (n: Notification) => {
+        if (n.is_sent) {
+          return new Date(n.sent_at || n.notification_date).getTime()
+        }
+        return new Date(n.notification_date).getTime()
+      }
+
       switch (sortBy) {
+        case "upcoming": {
+          if (a.is_sent !== b.is_sent) {
+            return Number(a.is_sent) - Number(b.is_sent) // 미발송 먼저
+          }
+          return getKey(a) - getKey(b) // 가까운 날짜 먼저
+        }
         case "date-desc":
           return new Date(b.notification_date).getTime() - new Date(a.notification_date).getTime()
         case "date-asc":
           return new Date(a.notification_date).getTime() - new Date(b.notification_date).getTime()
-        case "priority":
-          // Tax reminders get higher priority
+        case "priority": {
           const aPriority = a.message.includes("세금") || a.message.includes("납부") ? 1 : 0
           const bPriority = b.message.includes("세금") || b.message.includes("납부") ? 1 : 0
           return bPriority - aPriority
+        }
         case "status":
           return Number(a.is_sent) - Number(b.is_sent)
         default:
@@ -245,6 +281,20 @@ export function NotificationsClient() {
 
     return filtered
   }, [notifications, searchTerm, filterStatus, filterType, sortBy])
+
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedNotifications.length / PAGE_SIZE))
+  const pagedNotifications = useMemo(
+    () => filteredAndSortedNotifications.slice((page - 1) * PAGE_SIZE, (page - 1) * PAGE_SIZE + PAGE_SIZE),
+    [filteredAndSortedNotifications, page]
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchTerm, filterType, filterStatus, sortBy])
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [totalPages, page])
 
   const groupedNotifications = useMemo(() => {
     const groups: { [key: string]: Notification[] } = {}
@@ -259,6 +309,38 @@ export function NotificationsClient() {
 
     return groups
   }, [filteredAndSortedNotifications])
+
+  const taxIdToStationName = useMemo(() => {
+    const map: Record<string, string> = {}
+    taxes.forEach((t) => {
+      map[t.id] = t.charging_stations?.station_name || ""
+    })
+    return map
+  }, [taxes])
+
+  const getTypeLabel = (type: string) => {
+    if (type === "tax") return "세금"
+    if (type === "station_schedule") return "사업 일정"
+    if (type === "manual") return "수동"
+    return "기타"
+  }
+
+  const getStationName = (n: Notification) => {
+    if ((n.notification_type === "manual" || n.notification_type === "station_schedule") && n.station_id) {
+      return stationsMap[n.station_id]?.station_name || "-"
+    }
+    if (n.tax_id) {
+      return taxIdToStationName[n.tax_id] || "-"
+    }
+    return "-"
+  }
+
+  const renderSendDate = (n: Notification) => {
+    if (n.is_sent && n.sent_at) {
+      return new Date(n.sent_at).toLocaleString("ko-KR")
+    }
+    return `${new Date(n.notification_date).toLocaleDateString("ko-KR")} 예정`
+  }
 
   const NotificationCard = ({
     notification,
@@ -318,6 +400,11 @@ export function NotificationsClient() {
                 {notification.notification_schedules && (
                   <Badge variant="outline" className="text-xs">
                     {notification.notification_schedules.name}
+                  </Badge>
+                )}
+                {notification.notification_type === "manual" && (
+                  <Badge variant="secondary" className="bg-gray-100 text-gray-800 text-xs">
+                    수동
                   </Badge>
                 )}
                 {variant === "tax" && <Badge className="bg-yellow-100 text-yellow-800 text-xs">세금 리마인더</Badge>}
@@ -427,7 +514,6 @@ export function NotificationsClient() {
     const bodyMsg = (formData.get("message") as string) || ""
     const stationName = stationsMap[stationId]?.station_name || "-"
 
-    // 표시: "충전소명\n알림 발송 날짜\n알림 내용"
     const finalMessage = [stationName, dateStr, bodyMsg].join("\n")
 
     const insertData: any = {
@@ -437,11 +523,32 @@ export function NotificationsClient() {
       teams_channel_id: rawChannelId && rawChannelId !== "none" ? rawChannelId : null,
     }
 
-    const { error } = await supabase.from("manual_notifications").insert([insertData])
+    const { data: newManual, error } = await supabase
+      .from("manual_notifications")
+      .insert([insertData])
+      .select()
+      .single()
 
     if (error) {
       toast({ title: "오류", description: "알림 생성 중 오류가 발생했습니다.", variant: "destructive" })
     } else {
+      // Map to unified notification shape for immediate listing
+      const mapped: any = {
+        id: newManual.id,
+        tax_id: null,
+        notification_type: "manual",
+        schedule_id: null,
+        notification_date: newManual.notification_date,
+        notification_time: "10:00",
+        message: newManual.message,
+        is_sent: newManual.is_sent,
+        sent_at: newManual.sent_at,
+        teams_channel_id: newManual.teams_channel_id,
+        created_at: newManual.created_at,
+        station_id: newManual.station_id,
+      }
+      setNotifications(prev => [mapped, ...prev])
+
       logAudit({
         menu: "notifications",
         action: "create",
@@ -449,7 +556,7 @@ export function NotificationsClient() {
         actorName: actorName || "사용자",
         description: `수동 알림 생성: ${finalMessage.slice(0, 50)}`,
         targetTable: "manual_notifications",
-        targetId: stationId,
+        targetId: newManual.id,
       })
       setIsCreateNotificationOpen(false)
       toast({ title: "성공", description: "수동 알림이 생성되었습니다. 지정일 10시에 발송됩니다." })
@@ -984,6 +1091,7 @@ export function NotificationsClient() {
                   <SelectValue placeholder="정렬" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="upcoming">발송일 임박순</SelectItem>
                   <SelectItem value="date-desc">최신순</SelectItem>
                   <SelectItem value="date-asc">오래된순</SelectItem>
                   <SelectItem value="priority">중요도순</SelectItem>
@@ -993,130 +1101,80 @@ export function NotificationsClient() {
             </div>
           </div>
 
-          <Tabs defaultValue="all" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="all">모든 알림 ({filteredAndSortedNotifications.length})</TabsTrigger>
-              <TabsTrigger value="sent">발송 완료</TabsTrigger>
-              <TabsTrigger value="pending">발송 대기</TabsTrigger>
-              <TabsTrigger value="failed">발송 실패</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="all" className="space-y-6">
-              {Object.keys(groupedNotifications).length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  {searchTerm ? "검색 결과가 없습니다." : "알림이 없습니다."}
-                </div>
-              ) : (
-                Object.entries(groupedNotifications).map(([date, dateNotifications]) => (
-                  <div key={date} className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-muted-foreground">{date}</h3>
-                      <div className="flex-1 h-px bg-border"></div>
-                      <span className="text-xs text-muted-foreground">{dateNotifications.length}개</span>
-                    </div>
-                    <div className="grid gap-3">
-                      {dateNotifications.map((notification) => (
-                        <NotificationCard key={notification.id} notification={notification} />
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </TabsContent>
-
-            <TabsContent value="sent" className="space-y-6">
-              {(() => {
-                const sentNotifications = filteredAndSortedNotifications.filter(n => n.is_sent)
-                const sentGroups = sentNotifications.reduce((groups: { [key: string]: Notification[] }, notification) => {
-                  const date = new Date(notification.notification_date).toLocaleDateString("ko-KR")
-                  if (!groups[date]) groups[date] = []
-                  groups[date].push(notification)
-                  return groups
-                }, {})
-
-                return Object.keys(sentGroups).length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">발송 완료된 알림이 없습니다.</div>
+          <div className="border rounded-md overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[110px]">알림 유형</TableHead>
+                  <TableHead className="w-[220px]">충전소명</TableHead>
+                  <TableHead>알림 내용</TableHead>
+                  <TableHead className="w-[170px]">발송일</TableHead>
+                  <TableHead className="w-[110px]">상태</TableHead>
+                  <TableHead className="w-[160px] text-right">동작</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pagedNotifications.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-10">{searchTerm ? "검색 결과가 없습니다." : "알림이 없습니다."}</TableCell>
+                  </TableRow>
                 ) : (
-                  Object.entries(sentGroups).map(([date, dateNotifications]) => (
-                    <div key={date} className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-medium text-muted-foreground">{date}</h3>
-                        <div className="flex-1 h-px bg-border"></div>
-                        <span className="text-xs text-muted-foreground">{dateNotifications.length}개</span>
-                      </div>
-                      <div className="grid gap-3">
-                        {dateNotifications.map((notification) => (
-                          <NotificationCard key={notification.id} notification={notification} variant="sent" />
-                        ))}
-                      </div>
-                    </div>
+                  pagedNotifications.map((n) => (
+                    <TableRow key={n.id}>
+                      <TableCell>
+                        <Badge variant="outline">{getTypeLabel(n.notification_type)}</Badge>
+                      </TableCell>
+                      <TableCell className="truncate max-w-[220px]">{getStationName(n)}</TableCell>
+                      <TableCell className="truncate max-w-[520px]">
+                        <div className="text-sm whitespace-pre-line">{n.message}</div>
+                      </TableCell>
+                      <TableCell>{renderSendDate(n)}</TableCell>
+                      <TableCell>
+                        {n.is_sent ? (
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">완료</Badge>
+                        ) : n.error_message ? (
+                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">실패</Badge>
+                        ) : (
+                          <Badge variant="outline">대기</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {!n.is_sent && (
+                            <Button size="sm" onClick={() => handleSendNotification(n.id)} disabled={isActionLoading}>발송</Button>
+                          )}
+                          <Button size="sm" variant="destructive" onClick={() => handleDeleteNotification(n.id)} disabled={isActionLoading}>삭제</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ))
-                )
-              })()}
-            </TabsContent>
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
-            <TabsContent value="pending" className="space-y-6">
-              {(() => {
-                const pendingNotifications = filteredAndSortedNotifications.filter(n => !n.is_sent && !n.error_message)
-                const pendingGroups = pendingNotifications.reduce((groups: { [key: string]: Notification[] }, notification) => {
-                  const date = new Date(notification.notification_date).toLocaleDateString("ko-KR")
-                  if (!groups[date]) groups[date] = []
-                  groups[date].push(notification)
-                  return groups
-                }, {})
-
-                return Object.keys(pendingGroups).length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">발송 대기 중인 알림이 없습니다.</div>
-                ) : (
-                  Object.entries(pendingGroups).map(([date, dateNotifications]) => (
-                    <div key={date} className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-medium text-muted-foreground">{date}</h3>
-                        <div className="flex-1 h-px bg-border"></div>
-                        <span className="text-xs text-muted-foreground">{dateNotifications.length}개</span>
-                      </div>
-                      <div className="grid gap-3">
-                        {dateNotifications.map((notification) => (
-                          <NotificationCard key={notification.id} notification={notification} variant="unread" />
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                )
-              })()}
-            </TabsContent>
-
-            <TabsContent value="failed" className="space-y-6">
-              {(() => {
-                const failedNotifications = filteredAndSortedNotifications.filter(n => !n.is_sent && n.error_message)
-                const failedGroups = failedNotifications.reduce((groups: { [key: string]: Notification[] }, notification) => {
-                  const date = new Date(notification.notification_date).toLocaleDateString("ko-KR")
-                  if (!groups[date]) groups[date] = []
-                  groups[date].push(notification)
-                  return groups
-                }, {})
-
-                return Object.keys(failedGroups).length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">발송 실패한 알림이 없습니다.</div>
-                ) : (
-                  Object.entries(failedGroups).map(([date, dateNotifications]) => (
-                    <div key={date} className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-medium text-muted-foreground">{date}</h3>
-                        <div className="flex-1 h-px bg-border"></div>
-                        <span className="text-xs text-muted-foreground">{dateNotifications.length}개</span>
-                      </div>
-                      <div className="grid gap-3">
-                        {dateNotifications.map((notification) => (
-                          <NotificationCard key={notification.id} notification={notification} />
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                )
-              })()}
-            </TabsContent>
-          </Tabs>
+          <div className="mt-4">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); if (page > 1) setPage(page - 1) }} />
+                </PaginationItem>
+                {Array.from({ length: totalPages }).slice(0, 5).map((_, i) => {
+                  const pageNum = i + 1
+                  return (
+                    <PaginationItem key={pageNum}>
+                      <PaginationLink href="#" isActive={page === pageNum} onClick={(e) => { e.preventDefault(); setPage(pageNum) }}>
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                })}
+                <PaginationItem>
+                  <PaginationNext href="#" onClick={(e) => { e.preventDefault(); if (page < totalPages) setPage(page + 1) }} />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
         </TabsContent>
 
         <TabsContent value="channels" className="space-y-4">
