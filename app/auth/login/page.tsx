@@ -71,14 +71,14 @@ export default function LoginPage() {
           <div className="text-center">
             <div className="flex items-center justify-center gap-2">
               <img
-                src="/logo-small.png"
+                src="/water%20CI_symbol_white.png"
                 alt="logo"
                 className="h-6 w-auto"
                 onError={(e) => {
                   const img = e.currentTarget as HTMLImageElement
                   if (!(img as any).dataset.fallback) {
                     ;(img as any).dataset.fallback = "1"
-                    img.src = "/water%20CI_symbol_white.png"
+                    img.src = "/placeholder-logo.png"
                   } else {
                     img.style.display = "none"
                   }
@@ -144,14 +144,14 @@ export default function LoginPage() {
 
               <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
                 <img
-                  src="/logo-small.png"
+                  src="/water%20CI_symbol_white.png"
                   alt="Water"
                   className="h-4 w-auto opacity-80"
                   onError={(e) => {
                     const img = e.currentTarget as HTMLImageElement
                     if (!(img as any).dataset.fallback) {
                       ;(img as any).dataset.fallback = "1"
-                      img.src = "/water%20CI_symbol_white.png"
+                      img.src = "/placeholder-logo.png"
                     } else {
                       img.style.display = "none"
                     }

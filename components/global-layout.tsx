@@ -192,29 +192,6 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="bg-background border-b border-border sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <Link href="/" className="flex items-center space-x-3">
-                <img
-                  src="/logo-small.png"
-                  alt="logo"
-                  className="h-6 w-auto"
-                  onError={(e) => {
-                    const img = e.currentTarget as HTMLImageElement
-                    if (!img.dataset.fallback) {
-                      img.dataset.fallback = "1"
-                      img.src = "/water%20CI_symbol_white.png"
-                    } else {
-                      img.style.display = "none"
-                    }
-                  }}
-                />
-                <div className="text-3xl font-black text-white">TMS</div>
-              </Link>
-            </div>
-          </div>
-        </header>
         <main>{children}</main>
       </div>
     )
@@ -236,14 +213,14 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
         <div className="p-6 bg-neutral-900">
           <Link href="/dashboard" className="flex items-center space-x-3">
             <img
-              src="/logo-small.png"
+              src="/water%20CI_symbol_white.png"
               alt="logo"
               className="h-6 w-auto"
               onError={(e) => {
                 const img = e.currentTarget as HTMLImageElement
                 if (!img.dataset.fallback) {
                   img.dataset.fallback = "1"
-                  img.src = "/water%20CI_symbol_white.png"
+                  img.src = "/placeholder-logo.png"
                 } else {
                   img.style.display = "none"
                 }
@@ -298,14 +275,14 @@ const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {
           </Button>
           <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
             <img
-              src="/logo-small.png"
+              src="/water%20CI_symbol_white.png"
               alt="Water"
               className="h-4 w-auto opacity-80"
               onError={(e) => {
                 const img = e.currentTarget as HTMLImageElement
                 if (!img.dataset.fallback) {
                   img.dataset.fallback = "1"
-                  img.src = "/water%20CI_symbol_white.png"
+                  img.src = "/placeholder-logo.png"
                 } else {
                   img.style.display = "none"
                 }
