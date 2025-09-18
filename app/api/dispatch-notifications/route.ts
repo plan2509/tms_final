@@ -361,15 +361,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Manual notifications: send at configured date/time when due
-
+    // Manual notifications (independent table): send at 10:00 KST when due
     const { data: pendingManuals } = await supabase
-      .from("notifications")
-      .select("id, message, notification_date, notification_time, teams_channel_id")
-      .eq("notification_type", "manual")
+      .from("manual_notifications")
+      .select("id, message, notification_date, teams_channel_id, is_sent")
       .eq("is_sent", false)
       .eq("notification_date", todayKst)
-      .eq("notification_time", "10:00")
 
     let dispatchedManual = 0
     if (pendingManuals && pendingManuals.length > 0) {
@@ -404,28 +401,15 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Mark as sent only if successful
-        if (sendSuccess) {
-          await supabase
-            .from("notifications")
-            .update({ 
-              is_sent: true, 
-              sent_at: new Date().toISOString(),
-              error_message: null,
-              last_attempt_at: new Date().toISOString()
-            })
-            .eq("id", n.id)
-        } else {
-          // Mark as failed
-          await supabase
-            .from("notifications")
-            .update({ 
-              is_sent: false, 
-              error_message: "Teams 발송 실패",
-              last_attempt_at: new Date().toISOString() 
-            })
-            .eq("id", n.id)
-        }
+        // Mark as sent/attempt (manual_notifications schema has no error_message)
+        await supabase
+          .from("manual_notifications")
+          .update({ 
+            is_sent: sendSuccess, 
+            sent_at: sendSuccess ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", n.id)
 
         dispatchedManual++
       }

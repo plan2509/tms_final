@@ -421,65 +421,38 @@ export function NotificationsClient() {
   const handleCreateNotification = async (formData: FormData) => {
     setIsActionLoading(true)
 
-    const rawTaxId = (formData.get("tax_id") as string) || ""
+    const stationId = (formData.get("station_id") as string) || ""
     const rawChannelId = (formData.get("teams_channel_id") as string) || ""
+    const dateStr = (formData.get("notification_date") as string) || ""
+    const bodyMsg = (formData.get("message") as string) || ""
+    const stationName = stationsMap[stationId]?.station_name || "-"
 
-    const notificationData = {
-      tax_id: rawTaxId && rawTaxId !== "none" ? rawTaxId : null,
-      notification_type: "manual" as const,
-      notification_date: formData.get("notification_date") as string,
-      notification_time: "10:00", // 매일 오전 10시로 고정
-      message: formData.get("message") as string,
+    // 표시: "충전소명\n알림 발송 날짜\n알림 내용"
+    const finalMessage = [stationName, dateStr, bodyMsg].join("\n")
+
+    const insertData: any = {
+      station_id: stationId,
+      notification_date: dateStr,
+      message: finalMessage,
       teams_channel_id: rawChannelId && rawChannelId !== "none" ? rawChannelId : null,
-      created_by: userId,
     }
 
-    const { data, error } = await supabase
-      .from("notifications")
-      .insert([notificationData])
-      .select(`
-        *,
-        taxes (
-          id,
-          tax_type,
-          tax_amount,
-          due_date,
-          charging_stations (
-            station_name,
-            location
-          )
-        ),
-        teams_channels (
-          id,
-          channel_name
-        )
-      `)
-      .single()
+    const { error } = await supabase.from("manual_notifications").insert([insertData])
 
     if (error) {
-      toast({
-        title: "오류",
-        description: "알림 생성 중 오류가 발생했습니다.",
-        variant: "destructive",
-      })
+      toast({ title: "오류", description: "알림 생성 중 오류가 발생했습니다.", variant: "destructive" })
     } else {
-      // 강제로 상태 업데이트
-      setNotifications(prevNotifications => [data, ...prevNotifications])
-      // audit log: create notification
       logAudit({
         menu: "notifications",
         action: "create",
         actorId: userId,
         actorName: actorName || "사용자",
-        description: `알림 생성: ${data.message?.slice(0, 50)}`,
-        targetTable: "notifications",
-        targetId: data.id,
+        description: `수동 알림 생성: ${finalMessage.slice(0, 50)}`,
+        targetTable: "manual_notifications",
+        targetId: stationId,
       })
       setIsCreateNotificationOpen(false)
-      toast({
-        title: "성공",
-        description: "알림이 성공적으로 생성되었습니다.",
-      })
+      toast({ title: "성공", description: "수동 알림이 생성되었습니다. 지정일 10시에 발송됩니다." })
     }
 
     setIsActionLoading(false)
@@ -843,19 +816,19 @@ export function NotificationsClient() {
   const NotificationForm = ({ onSubmit }: { onSubmit: (formData: FormData) => void }) => (
     <form action={onSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="tax_id">관련 세금 (선택사항)</Label>
-        <Select name="tax_id">
+        <Label htmlFor="station_id">충전소 *</Label>
+        <Select name="station_id" required>
           <SelectTrigger>
-            <SelectValue placeholder="세금을 선택하세요 (선택사항)" />
+            <SelectValue placeholder="충전소를 선택하세요" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">선택 안함</SelectItem>
-            {taxes.map((tax) => (
-              <SelectItem key={tax.id} value={tax.id}>
-                {tax.charging_stations.station_name} - {taxTypeLabels[tax.tax_type as keyof typeof taxTypeLabels]} (
-                {new Date(tax.due_date).toLocaleDateString("ko-KR")})
-              </SelectItem>
-            ))}
+            {Object.entries(stationsMap)
+              .sort((a, b) => a[1].station_name.localeCompare(b[1].station_name))
+              .map(([id, s]) => (
+                <SelectItem key={id} value={id}>
+                  {s.station_name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
@@ -863,7 +836,7 @@ export function NotificationsClient() {
       <div className="space-y-2">
         <Label htmlFor="notification_date">알림 날짜 *</Label>
         <Input id="notification_date" name="notification_date" type="date" required />
-        <p className="text-xs text-muted-foreground">매일 오전 10시에 자동으로 발송됩니다.</p>
+        <p className="text-xs text-muted-foreground">매일 오전 10시에 자동 발송됩니다.</p>
       </div>
 
       <div className="space-y-2">
@@ -884,7 +857,7 @@ export function NotificationsClient() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="message">알림 메시지 *</Label>
+        <Label htmlFor="message">알림 내용 *</Label>
         <Textarea id="message" name="message" placeholder="알림 메시지를 입력하세요" rows={4} required />
       </div>
 
