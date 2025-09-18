@@ -20,10 +20,12 @@ export async function POST(req: NextRequest) {
     // Get notification type from request body or query params
     const body = await req.json().catch(() => ({}))
     const notificationType = body.notification_type || req.nextUrl.searchParams.get("type")
+    const forceParam = body.force ?? req.nextUrl.searchParams.get("force")
+    const isForce = forceParam === true || forceParam === "1" || forceParam === "true"
 
     // Load active schedules based on notification type
-    let taxSchedules = []
-    let stationSchedules = []
+    let taxSchedules: any[] = []
+    let stationSchedules: any[] = []
     
     if (notificationType === "tax") {
       const { data: taxSched, error: taxSchedErr } = await supabase
@@ -41,6 +43,10 @@ export async function POST(req: NextRequest) {
         .eq("is_active", true)
       if (stationSchedErr) throw stationSchedErr
       stationSchedules = stationSched || []
+    } else if (notificationType === "manual") {
+      // 수동 전용 호출: 스케줄 기반 알림은 건너뜀
+      taxSchedules = []
+      stationSchedules = []
     } else {
       // 파라미터가 없으면 세금 알림만 처리 (AWS cron job용)
       const { data: taxSched, error: taxSchedErr } = await supabase
@@ -55,7 +61,7 @@ export async function POST(req: NextRequest) {
       stationSchedules = []
     }
 
-    if (taxSchedules.length === 0 && stationSchedules.length === 0) {
+    if (taxSchedules.length === 0 && stationSchedules.length === 0 && notificationType !== "manual") {
       return NextResponse.json({ success: true, dispatched: 0, dispatchedStation: 0 })
     }
 
@@ -96,6 +102,55 @@ export async function POST(req: NextRequest) {
     const webhooksAll = (channels || []).map((c: any) => c.webhook_url)
     const idToWebhook = new Map((channels || []).map((c: any) => [c.id, c.webhook_url]))
 
+    // Manual-only dispatch path (explicit call)
+    if (notificationType === "manual") {
+      const { data: pendingManuals } = await supabase
+        .from("manual_notifications")
+        .select("id, message, notification_date, teams_channel_id, is_sent")
+        .eq("is_sent", false)
+        .eq("notification_date", todayKst)
+
+      let dispatchedManual = 0
+      if (pendingManuals && pendingManuals.length > 0) {
+        const idToWebhookByChannel = new Map<string, string>()
+        ;(channels || []).forEach((c: any) => idToWebhookByChannel.set(c.id, c.webhook_url))
+
+        for (const n of pendingManuals as any[]) {
+          const inKstWindow = hh === "10" && parseInt(min) <= 4
+          if (!isForce && !inKstWindow) continue
+
+          const msg = n.message as string
+          const targetWebhook = n.teams_channel_id ? idToWebhookByChannel.get(n.teams_channel_id) : null
+          const targets = targetWebhook ? [targetWebhook] : webhooksAll
+          let sendSuccess = true
+          if (targets.length > 0) {
+            const sendResults = await Promise.allSettled(
+              targets.map((url: string) =>
+                fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
+              ),
+            )
+            const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
+            if (failedSends.length > 0) {
+              sendSuccess = false
+            }
+          }
+
+          await supabase
+            .from("manual_notifications")
+            .update({ 
+              is_sent: sendSuccess, 
+              sent_at: sendSuccess ? new Date().toISOString() : null,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", n.id)
+
+          dispatchedManual++
+        }
+      }
+
+      return NextResponse.json({ success: true, dispatched: 0, dispatchedStation: 0, dispatchedManual, now: nowStr })
+    }
+
     // Process tax notifications (per tax, per schedule)
     if (taxSchedules && taxSchedules.length > 0) {
       for (const sched of taxSchedules as any[]) {
@@ -112,11 +167,12 @@ export async function POST(req: NextRequest) {
           .eq("due_date", dateStr)
         if (taxErr) throw taxErr
 
-        for (const tax of taxes || []) {
+        for (const tax of (taxes as any[]) || []) {
           const taxTypeMap: any = { acquisition: '취득세', property: '재산세', other: '기타세' }
+          const stationName = (tax as any).charging_stations?.station_name || '-'
           const msg = [
             `세금 납부일 알림입니다.`,
-            `${tax.charging_stations?.station_name || '-'} / ${taxTypeMap[tax.tax_type] || '기타세'} / ${tax.due_date}`,
+            `${stationName} / ${taxTypeMap[(tax as any).tax_type] || '기타세'} / ${(tax as any).due_date}`,
             `https://tms.watercharging.com/`
           ].join("\n")
 
@@ -371,18 +427,19 @@ export async function POST(req: NextRequest) {
     let dispatchedManual = 0
     if (pendingManuals && pendingManuals.length > 0) {
       // Optional mapping for channel-specific sends
-      const idToWebhook = new Map<string, string>()
-      ;(channels || []).forEach((c: any) => idToWebhook.set(c.id, c.webhook_url))
+      const idToWebhookByChannel = new Map<string, string>()
+      ;(channels || []).forEach((c: any) => idToWebhookByChannel.set(c.id, c.webhook_url))
 
       for (const n of pendingManuals as any[]) {
-        // 매일 오전 10시에만 발송 (정확히 10:00-10:04 범위에서만)
-        if (hh !== "10" || parseInt(min) > 4) continue
+        // 발송 시점: 기본은 10:00~10:04, 강제 실행(force=1) 시 즉시 발송
+        const inKstWindow = hh === "10" && parseInt(min) <= 4
+        if (!isForce && !inKstWindow) continue
 
         const msg = n.message as string
 
 
         // Send teams to selected channel or all
-        const targetWebhook = n.teams_channel_id ? idToWebhook.get(n.teams_channel_id) : null
+        const targetWebhook = n.teams_channel_id ? idToWebhookByChannel.get(n.teams_channel_id) : null
         const targets = targetWebhook ? [targetWebhook] : webhooksAll
         let sendSuccess = true
         
