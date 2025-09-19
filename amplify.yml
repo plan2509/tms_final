@@ -2,10 +2,14 @@ version: 1
 frontend:
   phases:
     preBuild:
+      runtime-versions:
+        nodejs: 20
       commands:
         - nvm use 20
         - npm install -g pnpm
         - pnpm install
+        # Inject server envs into build-time .env.production for Next.js SSR
+        - echo "GOOGLE_AI_API_KEY=AIzaSyBMa-vFVsAQVvfbDkjAlE9sWoJA-45OrX8" > .env.production
     build:
       commands:
         - pnpm run build
