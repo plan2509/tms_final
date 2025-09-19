@@ -301,7 +301,7 @@ export default function DashboardPage() {
                 <div>
                   <CardTitle className="text-xl font-semibold">AI 세금 현황 분석</CardTitle>
                   <CardDescription className="mt-1">
-                    Grok AI가 현재 세금 현황을 종합적으로 분석한 결과입니다
+                    Google Gemini가 현재 세금 현황을 종합적으로 분석한 결과입니다
                   </CardDescription>
                 </div>
               </div>
