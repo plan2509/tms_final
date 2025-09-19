@@ -249,7 +249,6 @@ export async function POST(req: NextRequest) {
             .update({ 
               is_sent: sendSuccess, 
               sent_at: sendSuccess ? new Date().toISOString() : null,
-              error_message: sendSuccess ? null : "Teams 발송 실패",
               last_attempt_at: new Date().toISOString()
             })
             .eq("id", newNotification.id)
@@ -412,7 +411,6 @@ export async function POST(req: NextRequest) {
               .update({ 
                 is_sent: sendSuccess, 
                 sent_at: sendSuccess ? new Date().toISOString() : null,
-                error_message: sendSuccess ? null : "Teams 발송 실패",
                 last_attempt_at: new Date().toISOString()
               })
               .eq("id", newNotification.id)
