@@ -6,6 +6,8 @@ export async function POST(request: NextRequest) {
   try {
     console.log("[v0] Starting tax image analysis")
 
+    const debug = request.nextUrl?.searchParams?.get("debug") === "1"
+
     let requestData
     let image: string
     let imageType: string
@@ -36,13 +38,9 @@ export async function POST(request: NextRequest) {
 
     if (!process.env.GOOGLE_AI_API_KEY) {
       console.error("[Gemini] GOOGLE_AI_API_KEY not found")
-      return Response.json({
-        success: true,
-        data: {
-          extracted_text: "서비스를 준비 중입니다",
-          text_sections: [],
-        },
-      })
+      const payload: any = { success: true, data: { extracted_text: "서비스를 준비 중입니다", text_sections: [] } }
+      if (debug) payload.debug = { reason: "MISSING_API_KEY", keyPresent: false }
+      return Response.json(payload)
     }
 
     let result
@@ -94,13 +92,21 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`
         console.error("  status:", aiError?.status || aiError?.response?.status)
         console.error("  code:", aiError?.code)
       } catch {}
-      return Response.json({
-        success: true,
-        data: {
-          extracted_text: "서비스를 준비 중입니다",
-          text_sections: [],
-        },
-      })
+      if (debug) {
+        return Response.json(
+          {
+            success: false,
+            error: "AI_ERROR",
+            debug: {
+              message: aiError?.message,
+              status: aiError?.status || aiError?.response?.status,
+              code: aiError?.code,
+            },
+          },
+          { status: 500 },
+        )
+      }
+      return Response.json({ success: true, data: { extracted_text: "서비스를 준비 중입니다", text_sections: [] } })
     }
 
     if (!result || !result.response) {
@@ -221,16 +227,34 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`
       console.error("[Gemini] Raw AI response:", text)
 
       // Return default structure if parsing fails
-      return Response.json({
-        success: true,
-        data: {
-          extracted_text: "서비스를 준비 중입니다",
-          text_sections: [],
-        },
-      })
+      if (debug) {
+        return Response.json(
+          {
+            success: false,
+            error: "PARSE_ERROR",
+            debug: {
+              message: (parseError as any)?.message,
+              raw: text,
+            },
+          },
+          { status: 500 },
+        )
+      }
+      return Response.json({ success: true, data: { extracted_text: "서비스를 준비 중입니다", text_sections: [] } })
     }
   } catch (error) {
     console.error("[Gemini] Error analyzing tax image:", error)
+    const debug = request.nextUrl?.searchParams?.get("debug") === "1"
+    if (debug) {
+      return Response.json(
+        {
+          success: false,
+          error: "UNEXPECTED_ERROR",
+          debug: { message: (error as any)?.message },
+        },
+        { status: 500 },
+      )
+    }
     return Response.json({ success: true, data: { extracted_text: "서비스를 준비 중입니다", text_sections: [] } }, { status: 200 })
   }
 }

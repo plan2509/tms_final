@@ -3,16 +3,21 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function POST(request: NextRequest) {
   try {
+    const debug = request.nextUrl?.searchParams?.get("debug") === "1"
     const formData = await request.formData()
     const image = formData.get("image") as File
 
     if (!image) {
-      return NextResponse.json({ success: false, error: "서비스를 준비 중입니다" }, { status: 200 })
+      const payload: any = { success: false, error: "서비스를 준비 중입니다" }
+      if (debug) payload.debug = { reason: "NO_IMAGE" }
+      return NextResponse.json(payload, { status: 200 })
     }
 
     if (!process.env.GOOGLE_AI_API_KEY) {
       console.error("[Gemini] GOOGLE_AI_API_KEY not found")
-      return NextResponse.json({ success: true, data: { station_name: "", location: "", address: "", status: "operating" } })
+      const payload: any = { success: true, data: { station_name: "", location: "", address: "", status: "operating" } }
+      if (debug) payload.debug = { reason: "MISSING_API_KEY", keyPresent: false }
+      return NextResponse.json(payload)
     }
 
     // Convert image to base64
@@ -79,15 +84,21 @@ JSON 외에는 어떤 텍스트도 포함하지 마세요.`
       console.error("  status:", (error as any)?.status || (error as any)?.response?.status)
       console.error("  code:", (error as any)?.code)
     } catch {}
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          extracted_text: "서비스를 준비 중입니다",
-          text_sections: [],
+    const debugMode = request.nextUrl?.searchParams?.get("debug") === "1"
+    if (debugMode) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "AI_ERROR",
+          debug: {
+            message: (error as any)?.message,
+            status: (error as any)?.status || (error as any)?.response?.status,
+            code: (error as any)?.code,
+          },
         },
-      },
-      { status: 200 },
-    )
+        { status: 500 },
+      )
+    }
+    return NextResponse.json({ success: true, data: { extracted_text: "서비스를 준비 중입니다", text_sections: [] } }, { status: 200 })
   }
 }
