@@ -10,39 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call dispatch-notifications (tax+station+manual)
-        run: |
-          curl -sS -X GET "https://tms-final.vercel.app/api/dispatch-notifications" \
-            -H "x-cron-key: ${{ secrets.CRON_SECRET }}" \
-            -H "Accept: application/json" | tee response.json
-          echo "Response:" && cat response.json
-name: Dispatch Notifications (Daily)
-
-on:
-  schedule:
-    # Run at 01:00 UTC every day (KST 10:00)
-    - cron: '0 1 * * *'
-  workflow_dispatch:
-    inputs:
-      type:
-        description: 'Notification type (optional: tax | station_schedule)'
-        required: false
-        default: tax
-
-jobs:
-  dispatch:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Call dispatch-notifications
         shell: bash
         run: |
           set -euo pipefail
-          URL="https://tms.watercharging.com/api/dispatch-notifications"
-          if [ -n "${{ github.event.inputs.type || '' }}" ]; then
-            URL="$URL?type=${{ github.event.inputs.type }}"
-          fi
-          if [ -n "${{ secrets.CRON_SECRET || '' }}" ]; then
-            curl -sS -X POST -H "x-cron-key: ${{ secrets.CRON_SECRET }}" "$URL" | jq -r '.' || exit 1
+          URL="https://tms-final.vercel.app/api/dispatch-notifications"
+          if [ -n "${CRON_SECRET:=${{ secrets.CRON_SECRET }}}" ]; then
+            curl -fsSL -X GET "$URL" \
+              -H "x-cron-key: $CRON_SECRET" \
+              -H "Accept: application/json" \
+              -o response.json
           else
-            curl -sS -X POST "$URL" | jq -r '.' || exit 1
+            curl -fsSL -X GET "$URL" -H "Accept: application/json" -o response.json
           fi
+          echo "Response:" && cat response.json
 
