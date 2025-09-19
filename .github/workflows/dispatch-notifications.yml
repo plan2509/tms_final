@@ -2,6 +2,23 @@ name: Dispatch Notifications (Daily)
 
 on:
   schedule:
+    - cron: "0 3 * * *" # UTC 03:00 = KST 12:00
+  workflow_dispatch: {}
+
+jobs:
+  call-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call dispatch-notifications (tax+station+manual)
+        run: |
+          curl -sS -X GET "https://tms-final.vercel.app/api/dispatch-notifications" \
+            -H "x-cron-key: ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json" | tee response.json
+          echo "Response:" && cat response.json
+name: Dispatch Notifications (Daily)
+
+on:
+  schedule:
     # Run at 01:00 UTC every day (KST 10:00)
     - cron: '0 1 * * *'
   workflow_dispatch:
