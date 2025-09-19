@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
         ;(channels || []).forEach((c: any) => idToWebhookByChannel.set(c.id, c.webhook_url))
 
         for (const n of pendingManuals as any[]) {
-          const inKstWindow = hh === "11" && parseInt(min) <= 4
+          const inKstWindow = hh === "12" && parseInt(min) <= 4
           if (!isForce && !inKstWindow) continue
 
           const msg = n.message as string
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
                 schedule_id: sched.id,
                 tax_id: tax.id,
                 notification_date: todayKst,
-                notification_time: "11:00",
+                notification_time: "12:00",
                 title: (sched as any).name || '알림',
                 message: msg,
                 teams_channel_id: sched.teams_channel_id,
@@ -362,7 +362,7 @@ export async function POST(req: NextRequest) {
                   station_id: s.id,
                   station_missing_type: missingType,
                   notification_date: todayKst,
-                  notification_time: "11:00",
+                  notification_time: "12:00",
                   title: (sched as any).name || '알림',
                   message: msg,
                   teams_channel_id: sched.teams_channel_id,
@@ -435,8 +435,8 @@ export async function POST(req: NextRequest) {
       ;(channels || []).forEach((c: any) => idToWebhookByChannel.set(c.id, c.webhook_url))
 
       for (const n of pendingManuals as any[]) {
-        // 발송 시점: 기본은 11:00~11:04, 강제 실행(force=1) 시 즉시 발송
-        const inKstWindow = hh === "11" && parseInt(min) <= 4
+        // 발송 시점: 기본은 12:00~12:04, 강제 실행(force=1) 시 즉시 발송
+        const inKstWindow = hh === "12" && parseInt(min) <= 4
         if (!isForce && !inKstWindow) continue
 
         const msg = n.message as string

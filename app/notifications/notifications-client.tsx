@@ -148,7 +148,7 @@ export function NotificationsClient() {
           notification_type: "manual",
           schedule_id: null,
           notification_date: m.notification_date,
-          notification_time: "10:00",
+          notification_time: "12:00",
           message: m.message,
           is_sent: m.is_sent,
           sent_at: m.sent_at,
@@ -539,7 +539,7 @@ export function NotificationsClient() {
         notification_type: "manual",
         schedule_id: null,
         notification_date: newManual.notification_date,
-        notification_time: "10:00",
+        notification_time: "12:00",
         message: newManual.message,
         is_sent: newManual.is_sent,
         sent_at: newManual.sent_at,
@@ -559,7 +559,7 @@ export function NotificationsClient() {
         targetId: newManual.id,
       })
       setIsCreateNotificationOpen(false)
-      toast({ title: "성공", description: "수동 알림이 생성되었습니다. 지정일 10시에 발송됩니다." })
+      toast({ title: "성공", description: "수동 알림이 생성되었습니다. 지정일 12시에 발송됩니다." })
     }
 
     setIsActionLoading(false)
@@ -943,7 +943,7 @@ export function NotificationsClient() {
       <div className="space-y-2">
         <Label htmlFor="notification_date">알림 날짜 *</Label>
         <Input id="notification_date" name="notification_date" type="date" required />
-        <p className="text-xs text-muted-foreground">매일 오전 11시에 자동 발송됩니다.</p>
+        <p className="text-xs text-muted-foreground">매일 정오 12시에 자동 발송됩니다.</p>
       </div>
 
       <div className="space-y-2">

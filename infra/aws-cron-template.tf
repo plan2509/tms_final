@@ -65,7 +65,7 @@ resource "aws_lambda_function" "dispatch" {
 
 resource "aws_cloudwatch_event_rule" "daily" {
   name                = "dispatch_notifications_daily"
-  schedule_expression = "cron(0 2 * * ? *)" # UTC 02:00 (KST 11:00)
+  schedule_expression = "cron(0 3 * * ? *)" # UTC 03:00 (KST 12:00)
 }
 
 resource "aws_cloudwatch_event_target" "lambda" {
