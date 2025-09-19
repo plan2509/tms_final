@@ -301,25 +301,30 @@ export async function POST(req: NextRequest) {
 
         for (const station of allStations || []) {
           const existingSchedule = existingSchedules?.find(s => s.station_id === station.id)
-          
+
+          // 스케줄에서 제외(행 삭제)된 충전소는 알림 대상에서 제외
+          if (!existingSchedule) {
+            continue
+          }
+
           // Check if station was created more than 'days_before' days ago
           const stationCreatedDate = new Date(station.created_at)
           const daysSinceCreation = Math.floor((now.getTime() - stationCreatedDate.getTime()) / (1000 * 60 * 60 * 24))
-          
+
           // Only check for missing dates if the station was created more than 'days_before' days ago
           if (daysSinceCreation >= sched.days_before) {
-            // Check for missing use approval date (only for canopy stations)
+            // Check for missing use approval date (only for canopy stations) - enabled인 경우만 미입력 알림
             if (station.canopy_installed) {
-              if (!existingSchedule || !existingSchedule.use_approval_enabled || !existingSchedule.use_approval_date) {
+              if (existingSchedule.use_approval_enabled && !existingSchedule.use_approval_date) {
                 missingUseApprovalStations.push({
                   ...station,
                   missing_days: daysSinceCreation
                 })
               }
             }
-            
-            // Check for missing safety inspection date (all stations)
-            if (!existingSchedule || !existingSchedule.safety_inspection_date) {
+
+            // Check for missing safety inspection date (all stations) - 스케줄이 존재하는 경우만 검사
+            if (!existingSchedule.safety_inspection_date) {
               missingSafetyInspectionStations.push({
                 ...station,
                 missing_days: daysSinceCreation
