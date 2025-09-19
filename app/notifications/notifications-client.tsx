@@ -943,7 +943,7 @@ export function NotificationsClient() {
       <div className="space-y-2">
         <Label htmlFor="notification_date">알림 날짜 *</Label>
         <Input id="notification_date" name="notification_date" type="date" required />
-        <p className="text-xs text-muted-foreground">매일 오전 10시에 자동 발송됩니다.</p>
+        <p className="text-xs text-muted-foreground">매일 오전 11시에 자동 발송됩니다.</p>
       </div>
 
       <div className="space-y-2">

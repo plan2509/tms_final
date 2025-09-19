@@ -48,22 +48,28 @@ export async function POST(req: NextRequest) {
       taxSchedules = []
       stationSchedules = []
     } else {
-      // 파라미터가 없으면 세금 알림만 처리 (AWS cron job용)
-      const { data: taxSched, error: taxSchedErr } = await supabase
-        .from("notification_schedules")
-        .select("id, name, days_before, is_active, teams_channel_id")
-        .eq("notification_type", "tax")
-        .eq("is_active", true)
-      if (taxSchedErr) throw taxSchedErr
-      taxSchedules = taxSched || []
-      
-      // 충전소 일정 알림은 수동으로만 처리 (파라미터로 명시적으로 요청할 때만)
-      stationSchedules = []
+      // 파라미터가 없으면 두 유형 모두 처리 (일일 자동 발송)
+      const [taxRes, stationRes] = await Promise.all([
+        supabase
+          .from("notification_schedules")
+          .select("id, name, days_before, is_active, teams_channel_id")
+          .eq("notification_type", "tax")
+          .eq("is_active", true),
+        supabase
+          .from("notification_schedules")
+          .select("id, name, days_before, is_active, teams_channel_id")
+          .eq("notification_type", "station_schedule")
+          .eq("is_active", true),
+      ])
+
+      if (taxRes.error) throw taxRes.error
+      if (stationRes.error) throw stationRes.error
+
+      taxSchedules = taxRes.data || []
+      stationSchedules = stationRes.data || []
     }
 
-    if (taxSchedules.length === 0 && stationSchedules.length === 0 && notificationType !== "manual") {
-      return NextResponse.json({ success: true, dispatched: 0, dispatchedStation: 0 })
-    }
+    // 스케줄이 없어도 수동 알림은 10시에 처리해야 하므로, 조기 반환하지 않음
 
     // Determine current time window
     const now = new Date()
@@ -116,7 +122,7 @@ export async function POST(req: NextRequest) {
         ;(channels || []).forEach((c: any) => idToWebhookByChannel.set(c.id, c.webhook_url))
 
         for (const n of pendingManuals as any[]) {
-          const inKstWindow = hh === "10" && parseInt(min) <= 4
+          const inKstWindow = hh === "11" && parseInt(min) <= 4
           if (!isForce && !inKstWindow) continue
 
           const msg = n.message as string
@@ -197,7 +203,7 @@ export async function POST(req: NextRequest) {
                 schedule_id: sched.id,
                 tax_id: tax.id,
                 notification_date: todayKst,
-                notification_time: "10:00",
+                notification_time: "11:00",
                 title: (sched as any).name || '알림',
                 message: msg,
                 teams_channel_id: sched.teams_channel_id,
@@ -357,7 +363,7 @@ export async function POST(req: NextRequest) {
                   station_id: s.id,
                   station_missing_type: missingType,
                   notification_date: todayKst,
-                  notification_time: "10:00",
+                  notification_time: "11:00",
                   title: (sched as any).name || '알림',
                   message: msg,
                   teams_channel_id: sched.teams_channel_id,
@@ -431,8 +437,8 @@ export async function POST(req: NextRequest) {
       ;(channels || []).forEach((c: any) => idToWebhookByChannel.set(c.id, c.webhook_url))
 
       for (const n of pendingManuals as any[]) {
-        // 발송 시점: 기본은 10:00~10:04, 강제 실행(force=1) 시 즉시 발송
-        const inKstWindow = hh === "10" && parseInt(min) <= 4
+        // 발송 시점: 기본은 11:00~11:04, 강제 실행(force=1) 시 즉시 발송
+        const inKstWindow = hh === "11" && parseInt(min) <= 4
         if (!isForce && !inKstWindow) continue
 
         const msg = n.message as string
