@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createAdminClient()
+    const debug = req.nextUrl.searchParams.get("debug") === "1"
     
     // Get notification type from request body or query params
     const body = await req.json().catch(() => ({}))
@@ -107,6 +108,21 @@ export async function POST(req: NextRequest) {
 
     const webhooksAll = (channels || []).map((c: any) => c.webhook_url)
     const idToWebhook = new Map((channels || []).map((c: any) => [c.id, c.webhook_url]))
+
+    if (debug) {
+      return NextResponse.json({
+        success: true,
+        dryRun: true,
+        now: nowStr,
+        kst: { yyyy, mm, dd, hh, min },
+        isVercelCron,
+        schedules: {
+          taxCount: taxSchedules?.length || 0,
+          stationCount: stationSchedules?.length || 0,
+        },
+        channels: channels?.length || 0,
+      })
+    }
 
     // Manual-only dispatch path (explicit call)
     if (notificationType === "manual") {
