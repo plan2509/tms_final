@@ -8,8 +8,8 @@ frontend:
         - nvm use 20
         - npm install -g pnpm
         - pnpm install
-        # Inject server envs into build-time .env.production for Next.js SSR
-        - echo "GOOGLE_AI_API_KEY=AIzaSyBMa-vFVsAQVvfbDkjAlE9sWoJA-45OrX8" > .env.production
+        # Inject server envs into build-time .env.production for Next.js SSR (from Amplify env vars)
+        - echo "GOOGLE_AI_API_KEY=$GOOGLE_AI_API_KEY" > .env.production
     build:
       commands:
         - pnpm run build
