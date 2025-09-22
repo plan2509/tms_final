@@ -105,7 +105,7 @@ export default function ManualPage() {
   ]
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="p-6 space-y-6">
       <div className="space-y-8">
         <div>
           <h1 className="font-bold mb-2 text-2xl">TMS 사용자 매뉴얼</h1>
