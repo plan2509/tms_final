@@ -10,6 +10,8 @@ frontend:
         - pnpm install
         # Inject server envs into build-time .env.production for Next.js SSR (from Amplify env vars)
         - echo "GOOGLE_AI_API_KEY=$GOOGLE_AI_API_KEY" > .env.production
+        - echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL" >> .env.production
+        - echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" >> .env.production
     build:
       commands:
         - pnpm run build
