@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       stationSchedules = stationRes.data || []
     }
 
-    // 스케줄이 없어도 수동 알림은 10시에 처리해야 하므로, 조기 반환하지 않음
+    // 스케줄이 없어도 수동 알림은 12시에 처리해야 하므로, 조기 반환하지 않음
 
     // Determine current time window
     const now = new Date()
@@ -151,10 +151,8 @@ export async function POST(req: NextRequest) {
                 fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg }) }),
               ),
             )
-            const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
-            if (failedSends.length > 0) {
-              sendSuccess = false
-            }
+            const okCount = sendResults.filter(result => result.status === 'fulfilled' && result.value.ok).length
+            sendSuccess = okCount > 0
           }
 
           await supabase
@@ -253,11 +251,11 @@ export async function POST(req: NextRequest) {
               ),
             )
 
-            const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
-            if (failedSends.length > 0) {
-              console.error(`[Tax Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
-              sendSuccess = false
+            const okCount = sendResults.filter(result => result.status === 'fulfilled' && result.value.ok).length
+            if (okCount === 0) {
+              console.error(`[Tax Notification] Failed to send to all (${targets.length}) Teams targets`)
             }
+            sendSuccess = okCount > 0
           }
 
           await supabase
@@ -312,7 +310,7 @@ export async function POST(req: NextRequest) {
           const daysSinceCreation = Math.floor((now.getTime() - stationCreatedDate.getTime()) / (1000 * 60 * 60 * 24))
 
           // Only check for missing dates if the station was created more than 'days_before' days ago
-          if (daysSinceCreation >= sched.days_before) {
+          if (daysSinceCreation === sched.days_before) {
             // Check for missing use approval date (only for canopy stations) - enabled인 경우만 미입력 알림
             if (station.canopy_installed) {
               if (existingSchedule.use_approval_enabled && !existingSchedule.use_approval_date) {
@@ -419,11 +417,11 @@ export async function POST(req: NextRequest) {
               )
               
               // Check for failed sends
-              const failedSends = sendResults.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok))
-              if (failedSends.length > 0) {
-                console.error(`[Station Schedule Notification] Failed to send ${failedSends.length}/${targets.length} Teams messages`)
-                sendSuccess = false
+              const okCount = sendResults.filter(result => result.status === 'fulfilled' && result.value.ok).length
+              if (okCount === 0) {
+                console.error(`[Station Schedule Notification] Failed to send to all (${targets.length}) Teams targets`)
               }
+              sendSuccess = okCount > 0
             }
 
             // Update notification status
