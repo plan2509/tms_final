@@ -215,14 +215,26 @@ export default function StationSchedulesPage() {
         if (error) throw error
       }
 
-      // 첨부 업로드 처리 (선택)
+      // 첨부 업로드 처리 (선택) - 생성된 취득세에 연결 시도
       try {
         const fileInput = document.getElementById(`file-${card.id}`) as HTMLInputElement | null
         const file = fileInput?.files?.[0]
         if (file) {
+          // 최근 생성된 취득세를 탐색 (해당 충전소 기준)
+          let targetTaxId: string | null = null
+          const { data: latestTax } = await supabase
+            .from('taxes')
+            .select('id')
+            .eq('station_id', station.id)
+            .eq('tax_type', 'acquisition')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (latestTax?.id) targetTaxId = latestTax.id
+
           const form = new FormData()
-          form.append('entity_type', 'station_schedule')
-          form.append('entity_id', existingSchedule?.id || scheduleData.id || station.id)
+          form.append('entity_type', targetTaxId ? 'tax' : 'station_schedule')
+          form.append('entity_id', targetTaxId || (existingSchedule?.id || station.id))
           form.append('file', file)
           await fetch('/api/attachments/upload', { method: 'POST', body: form })
         }

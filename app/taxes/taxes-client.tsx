@@ -116,7 +116,6 @@ export function TaxesClient() {
   const [editingTax, setEditingTax] = useState<Tax | null>(null)
   const [viewingTax, setViewingTax] = useState<Tax | null>(null)
   const [taxAttachments, setTaxAttachments] = useState<Array<{ id: string; file_name: string; size: number }>>([])
-  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [pendingCurrentPage, setPendingCurrentPage] = useState(1)
   const [completedCurrentPage, setCompletedCurrentPage] = useState(1)
@@ -975,33 +974,31 @@ export function TaxesClient() {
     }
   }
 
-  const uploadTaxAttachment = async (taxId: string, file: File) => {
-    if (!file) return
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: '용량 초과', description: '10MB 이하만 업로드 가능합니다.', variant: 'destructive' })
-      return
-    }
-    const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp']
-    if (!allowed.includes(file.type)) {
-      toast({ title: '형식 오류', description: 'PDF/PNG/JPG/WEBP만 가능', variant: 'destructive' })
-      return
-    }
-    try {
-      setIsUploadingAttachment(true)
-      const form = new FormData()
-      form.append('entity_type', 'tax')
-      form.append('entity_id', taxId)
-      form.append('file', file)
-      const res = await fetch('/api/attachments/upload', { method: 'POST', body: form })
-      const json = await res.json()
-      if (!res.ok || !json?.success) throw new Error(json?.error || 'upload failed')
-      await fetchTaxAttachments(taxId)
-      toast({ title: '업로드 완료', description: file.name })
-    } catch (e: any) {
-      toast({ title: '업로드 실패', description: e?.message || '오류가 발생했습니다', variant: 'destructive' })
-    } finally {
-      setIsUploadingAttachment(false)
-    }
+  const AttachmentsInline = ({ taxId }: { taxId: string }) => {
+    const [list, setList] = useState<Array<{ id: string; file_name: string; size: number }>>([])
+    useEffect(() => {
+      (async () => {
+        const { data } = await supabase
+          .from('attachments')
+          .select('id, file_name, size')
+          .eq('entity_type', 'tax')
+          .eq('entity_id', taxId)
+          .order('created_at', { ascending: false })
+        setList(data || [])
+      })()
+    }, [taxId])
+    if (!list || list.length === 0) return null
+    return (
+      <div className="mt-3 pt-3 border-t space-y-2">
+        <p className="text-xs text-muted-foreground">첨부파일</p>
+        {list.map((a) => (
+          <div key={a.id} className="flex items-center justify-between text-sm">
+            <span className="truncate mr-3">{a.file_name} ({Math.ceil(a.size/1024)} KB)</span>
+            <Button size="sm" variant="outline" onClick={() => downloadAttachment(a.id)}>다운로드</Button>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   const handleDeleteTax = async (taxId: string) => {
@@ -1633,6 +1630,8 @@ export function TaxesClient() {
               <p className="text-sm font-medium text-blue-600 dark:text-blue-400">{tax.notes}</p>
             </div>
           )}
+          {/* Attachments quick list with download */}
+          <AttachmentsInline taxId={tax.id} />
         </CardContent>
       </Card>
     )
@@ -1917,7 +1916,7 @@ export function TaxesClient() {
             <DialogTitle>세금 상세 정보</DialogTitle>
           </DialogHeader>
 
-          {viewingTax && (
+              {viewingTax && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1979,29 +1978,17 @@ export function TaxesClient() {
                 )}
               </div>
 
-              {/* Attachments section */}
+              {/* Attachments section (read-only downloads) */}
               <div className="pt-4 border-t">
-                <div className="flex items-center justify-between mb-2">
-                  <Label>첨부파일</Label>
-                  <input
-                    type="file"
-                    accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) uploadTaxAttachment(viewingTax.id, f)
-                      e.currentTarget.value = ''
-                    }}
-                    disabled={isUploadingAttachment}
-                  />
-                </div>
-                <div className="space-y-2">
+                <Label>첨부파일</Label>
+                <div className="mt-2 space-y-2">
                   {taxAttachments.length === 0 ? (
                     <p className="text-sm text-muted-foreground">첨부파일이 없습니다.</p>
                   ) : (
                     taxAttachments.map((att) => (
                       <div key={att.id} className="flex items-center justify-between text-sm">
                         <span className="truncate mr-3">{att.file_name} ({Math.ceil(att.size/1024)} KB)</span>
-                        <Button size="sm" variant="outline" onClick={() => downloadAttachment(att.id)} aria-describedby={"download-"+att.id}>다운로드</Button>
+                        <Button size="sm" variant="outline" onClick={() => downloadAttachment(att.id)}>다운로드</Button>
                       </div>
                     ))
                   )}
