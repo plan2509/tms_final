@@ -957,6 +957,10 @@ export function TaxesClient() {
     } catch {}
   }
 
+  useEffect(() => {
+    if (viewingTax?.id) fetchTaxAttachments(viewingTax.id)
+  }, [viewingTax?.id])
+
   const downloadAttachment = async (attachmentId: string) => {
     try {
       const res = await fetch(`/api/attachments/signed-url?id=${attachmentId}`)
@@ -1997,7 +2001,7 @@ export function TaxesClient() {
                     taxAttachments.map((att) => (
                       <div key={att.id} className="flex items-center justify-between text-sm">
                         <span className="truncate mr-3">{att.file_name} ({Math.ceil(att.size/1024)} KB)</span>
-                        <Button size="sm" variant="outline" onClick={() => downloadAttachment(att.id)}>다운로드</Button>
+                        <Button size="sm" variant="outline" onClick={() => downloadAttachment(att.id)} aria-describedby={"download-"+att.id}>다운로드</Button>
                       </div>
                     ))
                   )}

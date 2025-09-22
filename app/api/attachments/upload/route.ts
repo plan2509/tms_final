@@ -43,11 +43,20 @@ export async function POST(req: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer()
+    // Edge runtimes may not have Node Buffer; ensure using global Buffer
     const buffer = Buffer.from(arrayBuffer)
     const safeName = (file.name || "file").replace(/[^A-Za-z0-9._-]/g, "_")
     const ext = safeName.includes(".") ? safeName.split(".").pop() : undefined
     const fileId = randomUUID()
     const storagePath = `${entityType}/${entityId}/${fileId}${ext ? `.${ext}` : ""}`
+
+    // Ensure bucket exists (idempotent)
+    try {
+      const { data: existing } = await supabase.storage.getBucket("attachments")
+      if (!existing) {
+        await supabase.storage.createBucket("attachments", { public: false })
+      }
+    } catch {}
 
     // Upload to storage (private bucket: attachments)
     const { data: uploadRes, error: uploadErr } = await supabase.storage
