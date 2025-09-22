@@ -30,7 +30,7 @@ const textNavigation = [
   { name: "통계", href: "/statistics" },
   { name: "캘린더", href: "/calendar" },
   { name: "설정", href: "/settings" },
-  { name: "메뉴얼", href: "/manual" },
+  { name: "매뉴얼", href: "/manual" },
 ]
 
 const GlobalLayoutComponent = ({ children }: GlobalLayoutProps) => {

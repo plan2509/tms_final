@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export const metadata: Metadata = {
-  title: "메뉴얼 - TMS",
-  description: "TMS 시스템 사용 메뉴얼",
+  title: "매뉴얼 - TMS",
+  description: "TMS 시스템 사용 매뉴얼",
 }
 
 export default function ManualPage() {
@@ -32,19 +32,32 @@ export default function ManualPage() {
       description: "AI 기반 세금 정보 관리",
       content: [
         "세금 등록: 우상단 '세금 등록' 버튼을 클릭하여 새 세금을 등록합니다",
-        "AI 이미지 인식: 세금 고지서 이미지를 업로드하면 자동으로 정보를 추출합니다",
+        "AI 이미지 인식(Google Gemini): 세금 고지서 이미지를 업로드하면 자동으로 정보를 추출합니다",
         "세금 수정/삭제: 각 세금 항목의 메뉴(⋮)를 클릭하여 수정하거나 삭제합니다",
         "진행중인 세금과 납부 완료된 세금이 구분되어 표시됩니다",
+        "세금 인사이트: 대시보드에서 'AI 세금 분석'을 통해 현황 요약을 확인합니다",
       ],
     },
     {
       title: "알림 관리",
       description: "Teams 연동 알림 시스템",
       content: [
-        "알림 생성: 우상단 '알림 생성' 버튼을 클릭하여 새 알림을 생성합니다",
-        "Teams 연동: Teams 채널을 등록하면 알림이 자동으로 전송됩니다",
-        "알림 발송: 생성된 알림을 선택하여 즉시 발송할 수 있습니다",
-        "알림 삭제: 각 알림의 메뉴(⋮)를 클릭하여 삭제할 수 있습니다",
+        "목록: 표 형태(10개/페이지), '발송일 임박순' 정렬로 표시됩니다",
+        "수동 알림: 충전소/날짜/메시지로 생성하며 목록에 'manual' 배지로 표시됩니다",
+        "발송 시간: 매일 12:00 (KST) 자동 발송",
+        "즉시 발송: 수동 강제 발송은 force=1 파라미터로 수행합니다",
+        "Teams 연동: Teams 채널을 등록하면 대상 채널로 전송됩니다",
+        "삭제: 각 알림의 메뉴(⋮)에서 삭제할 수 있습니다",
+      ],
+    },
+    {
+      title: "수동 알림 생성",
+      description: "독립 테이블(manual_notifications) 기반",
+      content: [
+        "충전소 선택 → 알림 날짜 선택 → 메시지 입력 → 저장",
+        "목록에 'manual' 배지로 구분되어 표시됩니다",
+        "자동 발송: 알림 날짜의 12:00(KST)에 전송",
+        "즉시 발송: /api/dispatch-notifications?type=manual&force=1",
       ],
     },
     {
@@ -84,15 +97,89 @@ export default function ManualPage() {
         "권한 변경은 설정 페이지에서 가능합니다",
       ],
     },
+    {
+      title: "알림 발송 정책",
+      description: "스케줄/중복/예외 처리",
+      content: [
+        "발송 대상: 세금(taxes), 사업 일정(station_schedules), 수동(manual_notifications)",
+        "발송 시간: 매일 12:00 KST (Vercel Cron/GitHub Actions/AWS EventBridge)",
+        "중복 방지: is_sent/sent_at로 중복 발송 방지",
+        "예외: 삭제된 스케줄은 제외, 사용승인 미입력 경고는 use_approval_enabled일 때만",
+      ],
+    },
+    {
+      title: "디버그 & 문제해결",
+      description: "API 디버그 모드와 점검 포인트",
+      content: [
+        "디버그 모드: /api/*?debug=1 로 상세 오류 확인",
+        "AI 오류: GOOGLE_AI_API_KEY 유효성, 할당량/결제 상태 확인",
+        "Amplify: amplify.yml에서 .env.production 주입 확인",
+        "크론: Vercel Cron 헤더 우회, GitHub Actions 스케줄/시크릿 확인",
+      ],
+    },
+    {
+      title: "환경변수",
+      description: "필수 설정",
+      content: [
+        "NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY",
+        "CRON_SECRET (수동 호출 보호)",
+        "GOOGLE_AI_API_KEY (Google Gemini)",
+      ],
+    },
   ]
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="space-y-8">
         <div>
-          <h1 className="font-bold mb-2 text-2xl">TMS 시스템 메뉴얼</h1>
+          <h1 className="font-bold mb-2 text-2xl">TMS 시스템 매뉴얼</h1>
           <p className="text-muted-foreground">{""}</p>
         </div>
+
+        {/* 시스템 개요 도식 */}
+        <Card className="bg-muted/50">
+          <CardHeader>
+            <CardTitle className="text-lg">시스템 개요</CardTitle>
+            <CardDescription>주요 구성요소와 데이터/요청 흐름</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="border rounded-lg p-3 bg-background">
+                  <div className="font-medium mb-1">스케줄러</div>
+                  <div className="text-muted-foreground">Vercel Cron / GitHub Actions / AWS EventBridge</div>
+                </div>
+                <div className="flex items-center justify-center">→</div>
+                <div className="border rounded-lg p-3 bg-background">
+                  <div className="font-medium mb-1">API</div>
+                  <div className="text-muted-foreground">/api/dispatch-notifications</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="border rounded-lg p-3 bg-background">
+                  <div className="font-medium mb-1">DB</div>
+                  <div className="text-muted-foreground">Supabase (taxes, station_schedules, notifications, manual_notifications)</div>
+                </div>
+                <div className="flex items-center justify-center">→</div>
+                <div className="border rounded-lg p-3 bg-background">
+                  <div className="font-medium mb-1">Teams</div>
+                  <div className="text-muted-foreground">웹훅으로 알림 전송</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="border rounded-lg p-3 bg-background">
+                  <div className="font-medium mb-1">AI 분석</div>
+                  <div className="text-muted-foreground">/api/analyze-*, Google Gemini</div>
+                </div>
+                <div className="flex items-center justify-center">↔</div>
+                <div className="border rounded-lg p-3 bg-background">
+                  <div className="font-medium mb-1">UI</div>
+                  <div className="text-muted-foreground">세금 이미지/현황 분석 결과 표시</div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {manualSections.map((section, index) => (
