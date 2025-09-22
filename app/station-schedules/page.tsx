@@ -215,6 +215,18 @@ export default function StationSchedulesPage() {
         if (error) throw error
       }
 
+      // 첨부 업로드 처리 (선택)
+      try {
+        const fileInput = document.getElementById(`file-${card.id}`) as HTMLInputElement | null
+        const file = fileInput?.files?.[0]
+        if (file) {
+          const form = new FormData()
+          form.append('entity_type', 'station_schedule')
+          form.append('entity_id', existingSchedule?.id || scheduleData.id || station.id)
+          form.append('file', file)
+          await fetch('/api/attachments/upload', { method: 'POST', body: form })
+        }
+      } catch {}
 
       // 성공 메시지
       const typeName = type === 'use_approval' ? '사용 승인일' : '안전 점검일'
@@ -333,6 +345,10 @@ export default function StationSchedulesPage() {
                   }`}>
                     ✓ {cardInfo.taxInfo}
                   </p>
+                  <div className="space-y-1 pt-1">
+                    <Label className="text-xs">첨부파일 (선택, 10MB 이하, PDF/이미지)</Label>
+                    <input id={`file-${card.id}`} type="file" accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp" />
+                  </div>
                 </div>
 
                 {/* 저장 버튼 */}

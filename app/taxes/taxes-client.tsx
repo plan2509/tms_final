@@ -33,6 +33,7 @@ interface Tax {
   tax_period: string | null
   notes: string | null
   status: "accounting_review" | "payment_scheduled" | "payment_completed"
+  payment_date?: string | null
   created_at: string
   updated_at: string
   charging_stations: {
@@ -114,6 +115,8 @@ export function TaxesClient() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [editingTax, setEditingTax] = useState<Tax | null>(null)
   const [viewingTax, setViewingTax] = useState<Tax | null>(null)
+  const [taxAttachments, setTaxAttachments] = useState<Array<{ id: string; file_name: string; size: number }>>([])
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [pendingCurrentPage, setPendingCurrentPage] = useState(1)
   const [completedCurrentPage, setCompletedCurrentPage] = useState(1)
@@ -130,7 +133,7 @@ export function TaxesClient() {
   // AI 이미지 분석 관련 상태
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [extractedText, setExtractedText] = useState("")
+  const [extractedText, setExtractedText] = useState<any | null>(null)
   
   // 새로운 Excel 업로드 상태
   const [isExcelUploadOpen, setIsExcelUploadOpen] = useState(false)
@@ -922,6 +925,12 @@ export function TaxesClient() {
             .delete()
             .eq('tax_id', taxId)
           if (delErrAll) console.warn('세금 관련 알림 전체 삭제 실패:', delErrAll.message)
+          // 첨부 파일도 일괄 삭제
+          await fetch('/api/attachments/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entity_type: 'tax', entity_id: taxId })
+          }).catch(() => {})
         } catch (e) {
           console.warn('세금 관련 알림 전체 삭제 중 오류:', e)
         }
@@ -933,6 +942,62 @@ export function TaxesClient() {
     }
 
     setIsLoading(false)
+  }
+
+  // Attachments helpers
+  const fetchTaxAttachments = async (taxId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('attachments')
+        .select('id, file_name, size')
+        .eq('entity_type', 'tax')
+        .eq('entity_id', taxId)
+        .order('created_at', { ascending: false })
+      if (!error && data) setTaxAttachments(data as any)
+    } catch {}
+  }
+
+  const downloadAttachment = async (attachmentId: string) => {
+    try {
+      const res = await fetch(`/api/attachments/signed-url?id=${attachmentId}`)
+      const json = await res.json()
+      if (json?.success && json?.url) {
+        window.open(json.url, '_blank')
+      } else {
+        toast({ title: '오류', description: '다운로드 링크 발급 실패', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: '오류', description: '다운로드 실패', variant: 'destructive' })
+    }
+  }
+
+  const uploadTaxAttachment = async (taxId: string, file: File) => {
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: '용량 초과', description: '10MB 이하만 업로드 가능합니다.', variant: 'destructive' })
+      return
+    }
+    const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      toast({ title: '형식 오류', description: 'PDF/PNG/JPG/WEBP만 가능', variant: 'destructive' })
+      return
+    }
+    try {
+      setIsUploadingAttachment(true)
+      const form = new FormData()
+      form.append('entity_type', 'tax')
+      form.append('entity_id', taxId)
+      form.append('file', file)
+      const res = await fetch('/api/attachments/upload', { method: 'POST', body: form })
+      const json = await res.json()
+      if (!res.ok || !json?.success) throw new Error(json?.error || 'upload failed')
+      await fetchTaxAttachments(taxId)
+      toast({ title: '업로드 완료', description: file.name })
+    } catch (e: any) {
+      toast({ title: '업로드 실패', description: e?.message || '오류가 발생했습니다', variant: 'destructive' })
+    } finally {
+      setIsUploadingAttachment(false)
+    }
   }
 
   const handleDeleteTax = async (taxId: string) => {
@@ -1258,7 +1323,7 @@ export function TaxesClient() {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-3">
-                          {extractedText.text_sections.map((section, index) => (
+                          {extractedText.text_sections.map((section: any, index: number) => (
                             <div key={index} className="bg-muted/30 rounded-md p-3 border-l-4 border-primary/30">
                               <div className="flex items-center gap-2 mb-2">
                                 <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
@@ -1908,6 +1973,35 @@ export function TaxesClient() {
                 {viewingTax.updated_at !== viewingTax.created_at && (
                   <span> • 수정일: {new Date(viewingTax.updated_at).toLocaleDateString("ko-KR")}</span>
                 )}
+              </div>
+
+              {/* Attachments section */}
+              <div className="pt-4 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <Label>첨부파일</Label>
+                  <input
+                    type="file"
+                    accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) uploadTaxAttachment(viewingTax.id, f)
+                      e.currentTarget.value = ''
+                    }}
+                    disabled={isUploadingAttachment}
+                  />
+                </div>
+                <div className="space-y-2">
+                  {taxAttachments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">첨부파일이 없습니다.</p>
+                  ) : (
+                    taxAttachments.map((att) => (
+                      <div key={att.id} className="flex items-center justify-between text-sm">
+                        <span className="truncate mr-3">{att.file_name} ({Math.ceil(att.size/1024)} KB)</span>
+                        <Button size="sm" variant="outline" onClick={() => downloadAttachment(att.id)}>다운로드</Button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           )}
