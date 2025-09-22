@@ -120,7 +120,7 @@ export default function ManualPage() {
                 {s.description && <CardDescription>{s.description}</CardDescription>}
               </CardHeader>
               <CardContent>
-                {s.items.length > 0 ? (
+                {s.items.length > 0 && (
                   <ul className="space-y-2">
                     {s.items.map((item, idx) => (
                       <li key={idx} className="text-sm leading-relaxed flex items-start">
@@ -129,8 +129,6 @@ export default function ManualPage() {
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">{s.description}</p>
                 )}
               </CardContent>
             </Card>
