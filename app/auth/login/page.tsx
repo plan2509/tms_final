@@ -69,23 +69,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <div className="text-center">
-            <div className="flex items-center justify-center gap-2">
-              <img
-                src="/water%20CI_symbol_white.png"
-                alt="logo"
-                className="h-6 w-auto"
-                onError={(e) => {
-                  const img = e.currentTarget as HTMLImageElement
-                  if (!(img as any).dataset.fallback) {
-                    ;(img as any).dataset.fallback = "1"
-                    img.src = "/placeholder-logo.png"
-                  } else {
-                    img.style.display = "none"
-                  }
-                }}
-              />
-              <h1 className="text-3xl font-bold text-white mb-2">TMS</h1>
-            </div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">TMS</h1>
           </div>
           <Card>
             <CardHeader>
@@ -104,7 +88,6 @@ export default function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
-                    <p className="text-sm text-yellow-500">@watercharging.com 도메인만 사용할 수 있습니다</p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">비밀번호</Label>
@@ -141,24 +124,6 @@ export default function LoginPage() {
                   </div>
                 </div>
               </form>
-
-              <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
-                <img
-                  src="/water%20CI_symbol_white.png"
-                  alt="Water"
-                  className="h-4 w-auto opacity-80"
-                  onError={(e) => {
-                    const img = e.currentTarget as HTMLImageElement
-                    if (!(img as any).dataset.fallback) {
-                      ;(img as any).dataset.fallback = "1"
-                      img.src = "/placeholder-logo.png"
-                    } else {
-                      img.style.display = "none"
-                    }
-                  }}
-                />
-                <span>made by water</span>
-              </div>
             </CardContent>
           </Card>
         </div>
